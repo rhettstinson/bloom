@@ -17,15 +17,16 @@ import {
 import { Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import RingRow from '../../components/RingRow';
-import FlowerStem from '../../components/FlowerStem';
+import FlowerGrowth from '../../components/FlowerGrowth';
 import { fetchTodaysPuzzle, fetchPuzzleBySeed, type PuzzleResponse } from '../../lib/api';
 import { isValidMove, findNewLetter, type Graph } from '../../lib/gameLogic';
-import { loadProgress, saveProgress, recordResult } from '../../lib/storage';
+import { loadProgress, saveProgress, recordResult, loadStats, type Stats } from '../../lib/storage';
 import { Colors, Fonts, Spacing, Radius } from '../../constants/theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
 const TOTAL_RINGS = 4;
+const MAX_HINTS = 3;
 
 interface GameState {
   puzzle: PuzzleResponse;
@@ -68,6 +69,8 @@ export default function BloomScreen() {
   const [inputError, setInputError] = useState('');
   const [gameKey, setGameKey]   = useState(0);
   const [seedModal, setSeedModal] = useState(false);
+  const [gardenModal, setGardenModal] = useState(false);
+  const [gardenStats, setGardenStats] = useState<Stats | null>(null);
   const devSeedRef              = useRef('');
   const inputRef                = useRef<TextInput>(null);
 
@@ -139,6 +142,13 @@ export default function BloomScreen() {
     }
   }, []);
 
+  // Open the Your Garden stats modal
+  const openGarden = useCallback(async () => {
+    const s = await loadStats();
+    setGardenStats(s);
+    setGardenModal(true);
+  }, []);
+
   // ── Derived state ────────────────────────────────────────────────────
 
   const currentWord = (): string => {
@@ -164,6 +174,17 @@ export default function BloomScreen() {
       setInputError(reason);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
+    }
+
+    // Block dead-end words on non-final rings (ring 4 words have no children by design)
+    const isFinalRing = game.currentRing === TOTAL_RINGS;
+    if (!isFinalRing) {
+      const children = game.puzzle.graph[candidate];
+      if (!children || children.length === 0) {
+        setInputError('Dead end — no path to full bloom from this word');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
     }
 
     setInputError('');
@@ -202,6 +223,7 @@ export default function BloomScreen() {
 
   const requestHint = useCallback(() => {
     if (!game || !isPlaying) return;
+    if (game.hintsUsed >= MAX_HINTS) return;
     const letter = pickHintLetter(currentWord(), game.puzzle.graph, game.revealedLetters);
     if (!letter) {
       setInputError('No more hints available for this ring');
@@ -252,6 +274,11 @@ export default function BloomScreen() {
         headerStyle: { backgroundColor: Colors.bg },
         headerTintColor: Colors.darkGreen,
         headerShadowVisible: false,
+        headerLeft: () => (
+          <TouchableOpacity onPress={openGarden} style={{ paddingHorizontal: 12 }}>
+            <Text style={{ fontSize: 20 }}>🌱</Text>
+          </TouchableOpacity>
+        ),
         headerRight: () => (
           <TouchableOpacity onPress={() => { setSeedModal(true); devSeedRef.current = ''; }} style={{ paddingHorizontal: 12 }}>
             <Text style={{ color: Colors.darkGreen, fontWeight: '700', fontSize: Fonts.size.sm, letterSpacing: 1.5 }}>NEW</Text>
@@ -267,7 +294,7 @@ export default function BloomScreen() {
       >
         {/* Main game area: stem + rings */}
         <View style={styles.gameArea}>
-          <FlowerStem ringsComplete={ringsComplete} height={280} />
+          <FlowerGrowth ringsComplete={ringsComplete} />
 
           <View style={styles.rings}>
             {/* Ring 4 → Ring 1 (top to bottom visually = highest ring first) */}
@@ -334,9 +361,19 @@ export default function BloomScreen() {
             </View>
 
             {/* Hint button */}
-            <TouchableOpacity style={styles.btnHint} onPress={requestHint}>
-              <Text style={styles.btnHintText}>HINT</Text>
-            </TouchableOpacity>
+            {game.hintsUsed < MAX_HINTS ? (
+              <TouchableOpacity style={styles.btnHint} onPress={requestHint}>
+                <Text style={styles.btnHintText}>
+                  HINT ({MAX_HINTS - game.hintsUsed} left)
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={[styles.btnHint, styles.btnHintExhausted]}>
+                <Text style={[styles.btnHintText, styles.btnHintTextExhausted]}>
+                  NO HINTS LEFT
+                </Text>
+              </View>
+            )}
           </View>
         ) : (
           /* Won / done state */
@@ -402,6 +439,69 @@ export default function BloomScreen() {
           </View>
         </View>
       )}
+      {/* Your Garden stats modal */}
+      {gardenModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Your Garden 🌱</Text>
+
+            {gardenStats && gardenStats.played > 0 ? (
+              <>
+                {/* 4-stat grid */}
+                <View style={styles.gardenGrid}>
+                  {[
+                    { label: 'Played',  value: String(gardenStats.played) },
+                    { label: 'Won %',   value: `${Math.round((gardenStats.won / gardenStats.played) * 100)}%` },
+                    { label: 'Streak',  value: String(gardenStats.streak) },
+                    { label: 'Best',    value: String(gardenStats.maxStreak) },
+                  ].map(({ label, value }) => (
+                    <View key={label} style={styles.gardenStat}>
+                      <Text style={styles.gardenStatValue}>{value}</Text>
+                      <Text style={styles.gardenStatLabel}>{label}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Hint distribution */}
+                {Object.keys(gardenStats.distribution).length > 0 && (
+                  <View style={styles.gardenDist}>
+                    <Text style={styles.gardenDistTitle}>Hint history</Text>
+                    {Array.from({ length: MAX_HINTS + 1 }, (_, i) => i)
+                      .filter(i => (gardenStats.distribution[i] ?? 0) > 0)
+                      .map(i => (
+                        <View key={i} style={styles.gardenDistRow}>
+                          <Text style={styles.gardenDistLabel}>
+                            {i === 0 ? 'No hints' : `${i} hint${i > 1 ? 's' : ''}`}
+                          </Text>
+                          <View style={styles.gardenDistBar}>
+                            <View style={[
+                              styles.gardenDistFill,
+                              { flex: gardenStats.distribution[i] / gardenStats.won },
+                            ]} />
+                          </View>
+                          <Text style={styles.gardenDistCount}>
+                            {gardenStats.distribution[i]}{i === 0 ? ' 🌟' : ''}
+                          </Text>
+                        </View>
+                      ))}
+                  </View>
+                )}
+              </>
+            ) : (
+              <Text style={styles.gardenEmpty}>
+                No games yet — play your first puzzle!
+              </Text>
+            )}
+
+            <TouchableOpacity
+              style={[styles.modalBtnGo, { marginTop: Spacing.md, width: '100%' }]}
+              onPress={() => setGardenModal(false)}
+            >
+              <Text style={styles.modalBtnGoText}>CLOSE</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -428,7 +528,7 @@ const styles = StyleSheet.create({
   // Game area: stem + rings side-by-side
   gameArea: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'center',
     gap: Spacing.md,
     paddingHorizontal: Spacing.lg,
@@ -509,6 +609,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: Fonts.size.xs,
     letterSpacing: 2,
+  },
+  btnHintExhausted: {
+    borderColor: Colors.tileBorder,
+    opacity: 0.45,
+  },
+  btnHintTextExhausted: {
+    color: Colors.textMuted,
+    letterSpacing: 1.5,
   },
 
   // Done / victory
@@ -661,5 +769,83 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: Fonts.size.sm,
     letterSpacing: 1.5,
+  },
+
+  // Garden modal
+  gardenGrid: {
+    flexDirection: 'row',
+    width: '100%',
+    marginBottom: Spacing.md,
+    gap: Spacing.xs,
+  },
+  gardenStat: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.tileBorder,
+  },
+  gardenStatValue: {
+    color: Colors.darkGreen,
+    fontSize: Fonts.size.xl,
+    fontWeight: '700',
+  },
+  gardenStatLabel: {
+    color: Colors.textMuted,
+    fontSize: Fonts.size.xs,
+    marginTop: 2,
+    letterSpacing: 0.5,
+  },
+  gardenDist: {
+    width: '100%',
+    marginBottom: Spacing.sm,
+  },
+  gardenDistTitle: {
+    color: Colors.textMuted,
+    fontSize: Fonts.size.xs,
+    letterSpacing: 1,
+    fontWeight: '700',
+    marginBottom: Spacing.xs,
+    textTransform: 'uppercase',
+  },
+  gardenDistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+    gap: Spacing.xs,
+  },
+  gardenDistLabel: {
+    color: Colors.darkGreen,
+    fontSize: Fonts.size.xs,
+    width: 56,
+    fontWeight: '600',
+  },
+  gardenDistBar: {
+    flex: 1,
+    height: 16,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.sm,
+    overflow: 'hidden',
+    flexDirection: 'row',
+  },
+  gardenDistFill: {
+    backgroundColor: Colors.midGreen,
+    borderRadius: Radius.sm,
+  },
+  gardenDistCount: {
+    color: Colors.textMuted,
+    fontSize: Fonts.size.xs,
+    width: 36,
+    textAlign: 'right',
+  },
+  gardenEmpty: {
+    color: Colors.textMuted,
+    fontSize: Fonts.size.sm,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginVertical: Spacing.md,
+    lineHeight: 20,
   },
 });
