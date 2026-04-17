@@ -66,9 +66,10 @@ export default function BloomScreen() {
   const [game, setGame]         = useState<GameState | null>(null);
   const [input, setInput]       = useState('');
   const [inputError, setInputError] = useState('');
+  const [gameKey, setGameKey]   = useState(0);
   const [devOpen, setDevOpen]   = useState(false);
-  const [devSeed, setDevSeed]   = useState('');
-  const inputRef = useRef<TextInput>(null);
+  const devSeedRef              = useRef('');
+  const inputRef                = useRef<TextInput>(null);
 
   // ── Load puzzle ──────────────────────────────────────────────────────
 
@@ -76,7 +77,9 @@ export default function BloomScreen() {
     fetcher: () => Promise<PuzzleResponse>,
     fresh = false,
   ) => {
-    // Clear the old game immediately so the old board never shows through
+    // Increment key first — forces complete remount of the game tree,
+    // resetting all Reanimated shared values in tiles/stem.
+    setGameKey(k => k + 1);
     setGame(null);
     setLoading(true);
     setError('');
@@ -229,6 +232,7 @@ export default function BloomScreen() {
       }} />
 
       <ScrollView
+        key={gameKey}
         style={styles.scroll}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -339,28 +343,30 @@ export default function BloomScreen() {
         {/* Dev seed switcher */}
         {__DEV__ && (
           <View style={styles.devBox}>
-            <TouchableOpacity onPress={() => { setDevOpen(o => !o); setDevSeed(''); }}>
+            <TouchableOpacity onPress={() => { setDevOpen(o => !o); devSeedRef.current = ''; }}>
               <Text style={styles.devBtnText}>DEV: change seed</Text>
             </TouchableOpacity>
             {devOpen && (
               <View style={styles.devRow}>
                 <TextInput
                   style={styles.devInput}
-                  value={devSeed}
-                  onChangeText={t => setDevSeed(t.toUpperCase())}
+                  defaultValue=""
+                  onChangeText={t => { devSeedRef.current = t.toUpperCase(); }}
                   placeholder="ACE"
                   placeholderTextColor={Colors.textMuted}
                   autoCapitalize="characters"
                   autoCorrect={false}
                   maxLength={3}
+                  onSubmitEditing={() => {
+                    const s = devSeedRef.current;
+                    if (s.length === 3) { setDevOpen(false); loadPuzzle(() => fetchPuzzleBySeed(s), true); }
+                  }}
                 />
                 <TouchableOpacity
                   style={styles.devGo}
                   onPress={() => {
-                    if (devSeed.length === 3) {
-                      setDevOpen(false);
-                      loadPuzzle(() => fetchPuzzleBySeed(devSeed), true);
-                    }
+                    const s = devSeedRef.current;
+                    if (s.length === 3) { setDevOpen(false); loadPuzzle(() => fetchPuzzleBySeed(s), true); }
                   }}
                 >
                   <Text style={styles.devGoText}>GO</Text>
