@@ -76,6 +76,8 @@ export default function BloomScreen() {
     fetcher: () => Promise<PuzzleResponse>,
     fresh = false,
   ) => {
+    // Clear the old game immediately so the old board never shows through
+    setGame(null);
     setLoading(true);
     setError('');
     setInput('');
@@ -103,7 +105,7 @@ export default function BloomScreen() {
         });
       }
     } catch (e) {
-      setError(`Could not load puzzle.\nMake sure the API server is running:\n  cd bloom-api && npm start\n\n${e instanceof Error ? e.message : String(e)}`);
+      setError(`Could not load puzzle — make sure the API server is running (cd bloom-api && npm start)\n\n${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setLoading(false);
     }
@@ -193,14 +195,22 @@ export default function BloomScreen() {
     return (
       <View style={styles.centered}>
         <Stack.Screen options={{ title: 'BLOOM', headerStyle: { backgroundColor: Colors.bg }, headerTintColor: Colors.darkGreen }} />
-        {error
-          ? <Text style={styles.errorBig}>{error}</Text>
-          : <ActivityIndicator size="large" color={Colors.midGreen} />}
+        <ActivityIndicator size="large" color={Colors.midGreen} />
       </View>
     );
   }
 
-  if (!game) return null;
+  if (error || !game) {
+    return (
+      <View style={styles.centered}>
+        <Stack.Screen options={{ title: 'BLOOM', headerStyle: { backgroundColor: Colors.bg }, headerTintColor: Colors.darkGreen }} />
+        <Text style={styles.errorBig}>{error || 'Something went wrong.'}</Text>
+        <TouchableOpacity style={[styles.btnPrimary, { marginTop: Spacing.lg }]} onPress={() => loadPuzzle(fetchTodaysPuzzle)}>
+          <Text style={styles.btnPrimaryText}>RETRY</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const seed = game.puzzle.seed.toLowerCase();
 
