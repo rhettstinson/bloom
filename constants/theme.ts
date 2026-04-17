@@ -1,31 +1,44 @@
-/** Shared design tokens — matches bloom.html palette */
+/** Shared design tokens — matches bloom.html botanical palette */
 
 export const Colors = {
   // Background / surface
-  bg: '#1a1a2e',
-  surface: '#16213e',
-  surfaceAlt: '#0f3460',
+  bg: '#faf8f2',          // cream
+  surface: '#e8f5d0',     // pale green
+  surfaceAlt: '#d0e8b0',
 
-  // Accent / brand
-  primary: '#4ecca3',       // teal — valid tile, petals
-  primaryDark: '#2a9d8f',
-  yellow: '#e2b714',        // selected / active tile
-  yellowDark: '#c9a20e',
+  // Brand greens
+  darkGreen: '#2d5016',
+  midGreen: '#4a7c28',
+  lightGreen: '#8fbc45',
+  paleGreen: '#e8f5d0',
+
+  // Accent
+  pink: '#e8a0b0',
+  pinkDark: '#c97a90',
+  pinkLight: '#f5d0db',
+  gold: '#d4a843',
+  goldLight: '#f0c96a',
+  goldPale: '#fdf3d8',
 
   // Text
-  textPrimary: '#eaeaea',
-  textMuted: '#a0a0b0',
-
-  // States
-  error: '#e74c3c',
-  errorDark: '#c0392b',
-  success: '#4ecca3',
+  textPrimary: '#2d5016',
+  textMuted: '#7a9a55',
 
   // Tiles
-  tileEmpty: '#2a2a4a',
-  tileFilled: '#0f3460',
-  tileValid: '#4ecca3',
-  tileBorder: '#4a4a6a',
+  tileBg: '#ffffff',
+  tileBorder: '#c8dba0',
+  tileActive: '#fdf3d8',   // gold-pale when typing
+  tileActiveBorder: '#d4a843',
+  tileBloomed: '#e8a0b0',  // pink when completed
+  tileBloomedBorder: '#c97a90',
+  tileSeed: '#2d5016',     // dark green for seed row
+  tileSeedBorder: '#2d5016',
+
+  // States
+  error: '#c0392b',
+
+  // Keep dark aliases for modal/overlay
+  overlay: 'rgba(0,0,0,0.4)',
 };
 
 export const Fonts = {

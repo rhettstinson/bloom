@@ -1,42 +1,65 @@
 /**
- * RingRow.tsx — One row of tiles for a single ring (word length stage)
+ * RingRow.tsx — One horizontal row of tiles for a ring stage
  *
- * ring 1 = 4 tiles, ring 2 = 5, ring 3 = 6, ring 4 = 7
+ * Ring ordering (bottom to top in the game layout):
+ *   ring 0 = seed (3 letters)
+ *   ring 1 = 4 letters
+ *   ring 2 = 5 letters
+ *   ring 3 = 6 letters
+ *   ring 4 = 7 letters  ← top / "full bloom"
  */
 
 import React from 'react';
 import { StyleSheet, View, Text } from 'react-native';
-import Tile from './Tile';
+import Tile, { TileState } from './Tile';
 import { Colors, Fonts, Spacing } from '../constants/theme';
 
-type RowStatus = 'future' | 'active' | 'done';
+type RowStatus = 'future' | 'active' | 'bloomed' | 'seed';
 
 interface RingRowProps {
-  ringIndex: number;    // 1–4
-  word: string;         // submitted word (empty if not yet done)
-  hint?: string;        // letter to highlight in hint color
+  ringIndex: number;      // 0 = seed, 1–4 = rings
+  word: string;           // submitted/current word ('' if not yet reached)
+  typingInput?: string;   // live input text (only used when status === 'active')
   status: RowStatus;
   tileSize?: number;
+  label?: string;         // e.g. "7 letters"
 }
 
-export default function RingRow({ ringIndex, word, hint, status, tileSize = 44 }: RingRowProps) {
-  const tileCount = ringIndex + 3;  // ring 1 → 4 tiles, ring 4 → 7 tiles
-  const letters = word.toUpperCase().split('');
+export default function RingRow({
+  ringIndex,
+  word,
+  typingInput = '',
+  status,
+  tileSize = 44,
+  label,
+}: RingRowProps) {
+  const tileCount = ringIndex + 3;  // 3 for seed, 4 for ring1 … 7 for ring4
+  const displayWord = status === 'active' ? typingInput : word;
+  const letters = displayWord.toUpperCase().split('');
 
   return (
-    <View style={styles.row}>
-      <Text style={[styles.label, status === 'future' && styles.labelMuted]}>
-        {ringIndex}
-      </Text>
+    <View style={[styles.row, status === 'future' && styles.rowFuture]}>
+      {label ? (
+        <Text style={[styles.label, status === 'future' && styles.labelMuted]}>
+          {label}
+        </Text>
+      ) : (
+        <View style={styles.labelPlaceholder} />
+      )}
+
       <View style={styles.tiles}>
         {Array.from({ length: tileCount }).map((_, i) => {
           const letter = letters[i] ?? '';
-          let tileState: 'empty' | 'filled' | 'valid' | 'hint' = 'empty';
-          if (status === 'done') {
-            tileState = 'valid';
-          } else if (letter) {
-            tileState = hint && letter === hint.toUpperCase() ? 'hint' : 'filled';
+          let tileState: TileState = 'empty';
+
+          if (status === 'seed') {
+            tileState = 'seed';
+          } else if (status === 'bloomed') {
+            tileState = 'bloomed';
+          } else if (status === 'active') {
+            tileState = letter ? 'typing' : 'active';
           }
+          // status === 'future' → empty
 
           return (
             <Tile
@@ -57,21 +80,29 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: Spacing.xs,
+    marginVertical: 5,
+  },
+  rowFuture: {
+    opacity: 0.35,
   },
   label: {
-    width: 20,
-    color: Colors.primary,
+    width: 58,
+    color: Colors.textMuted,
     fontFamily: Fonts.mono,
-    fontSize: Fonts.size.sm,
-    textAlign: 'center',
-    marginRight: Spacing.xs,
+    fontSize: Fonts.size.xs,
+    textAlign: 'right',
+    marginRight: Spacing.sm,
+    fontStyle: 'italic',
+    letterSpacing: 0.5,
   },
   labelMuted: {
-    color: Colors.textMuted,
+    color: Colors.tileBorder,
+  },
+  labelPlaceholder: {
+    width: 58 + Spacing.sm,
   },
   tiles: {
     flexDirection: 'row',
-    gap: Spacing.xs,
+    gap: 6,
   },
 });

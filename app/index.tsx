@@ -1,26 +1,16 @@
 /**
  * Home screen — game suite hub
- * Currently only BLOOM; add more games here as cards.
  */
 
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors, Fonts, Spacing, Radius } from '../constants/theme';
 
-interface GameCard {
-  id: string;
-  title: string;
-  subtitle: string;
-  emoji: string;
-  route: string;
-  available: boolean;
-}
-
-const GAMES: GameCard[] = [
+const GAMES = [
   {
     id: 'bloom',
     title: 'BLOOM',
-    subtitle: 'Grow a word from 3 to 7 letters',
+    subtitle: 'Grow a word\nfrom 3 to 7 letters',
     emoji: '🌸',
     route: '/bloom',
     available: true,
@@ -29,24 +19,22 @@ const GAMES: GameCard[] = [
 
 export default function HomeScreen() {
   const router = useRouter();
-
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Game Suite</Text>
-      <Text style={styles.subtitle}>Daily word puzzles</Text>
-
+      <Text style={styles.title}>🌱 Game Suite</Text>
+      <Text style={styles.sub}>Daily word puzzles</Text>
       <View style={styles.grid}>
-        {GAMES.map(game => (
+        {GAMES.map(g => (
           <TouchableOpacity
-            key={game.id}
-            style={[styles.card, !game.available && styles.cardDisabled]}
-            onPress={() => game.available && router.push(game.route as any)}
+            key={g.id}
+            style={[styles.card, !g.available && styles.cardDim]}
+            onPress={() => g.available && router.push(g.route as any)}
             activeOpacity={0.8}
           >
-            <Text style={styles.cardEmoji}>{game.emoji}</Text>
-            <Text style={styles.cardTitle}>{game.title}</Text>
-            <Text style={styles.cardSubtitle}>{game.subtitle}</Text>
-            {!game.available && <Text style={styles.comingSoon}>Coming soon</Text>}
+            <Text style={styles.emoji}>{g.emoji}</Text>
+            <Text style={styles.cardTitle}>{g.title}</Text>
+            <Text style={styles.cardSub}>{g.subtitle}</Text>
+            {!g.available && <Text style={styles.soon}>Coming soon</Text>}
           </TouchableOpacity>
         ))}
       </View>
@@ -60,20 +48,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg,
     padding: Spacing.lg,
     paddingTop: Spacing.xl,
+    alignItems: 'center',
   },
   title: {
-    color: Colors.primary,
-    fontSize: Fonts.size.title,
+    color: Colors.darkGreen,
+    fontSize: Fonts.size.xxl,
     fontWeight: '700',
-    textAlign: 'center',
-    letterSpacing: 4,
+    letterSpacing: 2,
   },
-  subtitle: {
+  sub: {
     color: Colors.textMuted,
-    fontSize: Fonts.size.md,
-    textAlign: 'center',
-    marginBottom: Spacing.xl,
+    fontSize: Fonts.size.sm,
     marginTop: Spacing.xs,
+    marginBottom: Spacing.xl,
+    letterSpacing: 1,
   },
   grid: {
     flexDirection: 'row',
@@ -87,31 +75,28 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     width: 160,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.surfaceAlt,
+    borderWidth: 1.5,
+    borderColor: Colors.tileBorder,
   },
-  cardDisabled: {
-    opacity: 0.5,
-  },
-  cardEmoji: {
-    fontSize: 40,
-    marginBottom: Spacing.sm,
-  },
+  cardDim: { opacity: 0.5 },
+  emoji: { fontSize: 40, marginBottom: Spacing.sm },
   cardTitle: {
-    color: Colors.primary,
+    color: Colors.darkGreen,
     fontSize: Fonts.size.lg,
     fontWeight: '700',
-    letterSpacing: 2,
+    letterSpacing: 3,
   },
-  cardSubtitle: {
+  cardSub: {
     color: Colors.textMuted,
     fontSize: Fonts.size.xs,
     textAlign: 'center',
     marginTop: Spacing.xs,
+    lineHeight: 16,
   },
-  comingSoon: {
-    color: Colors.yellow,
+  soon: {
+    color: Colors.gold,
     fontSize: Fonts.size.xs,
     marginTop: Spacing.sm,
+    fontWeight: '600',
   },
 });

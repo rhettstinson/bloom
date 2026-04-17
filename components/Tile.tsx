@@ -1,11 +1,12 @@
 /**
- * Tile.tsx — A single letter tile
+ * Tile.tsx — A single letter tile, botanical style
  *
- * Props:
- *   letter     — character to display ('' = empty)
- *   state      — 'empty' | 'filled' | 'valid' | 'active' | 'hint'
- *   size       — tile edge length in px (default 44)
- *   delay      — stagger delay in ms for flip animation
+ * states:
+ *   'empty'   — white, pale-green border
+ *   'active'  — gold-pale bg, gold border (active ring, no letter yet)
+ *   'typing'  — gold-pale bg, gold border, has letter (scales up slightly)
+ *   'bloomed' — pink bg, pink-dark border, white text (ring completed)
+ *   'seed'    — dark-green bg, white text
  */
 
 import React, { useEffect } from 'react';
@@ -15,78 +16,77 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withDelay,
-  interpolate,
-  Extrapolation,
+  withSpring,
 } from 'react-native-reanimated';
 import { Colors, Fonts, Radius } from '../constants/theme';
 
-type TileState = 'empty' | 'filled' | 'valid' | 'active' | 'hint';
+export type TileState = 'empty' | 'active' | 'typing' | 'bloomed' | 'seed';
 
 interface TileProps {
   letter?: string;
   state?: TileState;
   size?: number;
-  delay?: number;
+  delay?: number;   // stagger delay for bloom animation (ms)
 }
 
 const BG: Record<TileState, string> = {
-  empty:  Colors.tileEmpty,
-  filled: Colors.tileFilled,
-  valid:  Colors.tileValid,
-  active: Colors.yellow,
-  hint:   '#8b5cf6',  // purple hint tile
+  empty:   Colors.tileBg,
+  active:  Colors.tileBg,
+  typing:  Colors.tileActive,
+  bloomed: Colors.tileBloomed,
+  seed:    Colors.tileSeed,
 };
 
-const TEXT_COLOR: Record<TileState, string> = {
-  empty:  Colors.textMuted,
-  filled: Colors.textPrimary,
-  valid:  '#1a1a2e',
-  active: '#1a1a2e',
-  hint:   '#ffffff',
+const BORDER: Record<TileState, string> = {
+  empty:   Colors.tileBorder,
+  active:  Colors.tileActiveBorder,
+  typing:  Colors.tileActiveBorder,
+  bloomed: Colors.tileBloomedBorder,
+  seed:    Colors.tileSeedBorder,
+};
+
+const TEXT: Record<TileState, string> = {
+  empty:   Colors.darkGreen,
+  active:  Colors.darkGreen,
+  typing:  Colors.darkGreen,
+  bloomed: '#ffffff',
+  seed:    '#faf8f2',
 };
 
 export default function Tile({ letter = '', state = 'empty', size = 44, delay = 0 }: TileProps) {
-  const flip = useSharedValue(0);
   const scale = useSharedValue(1);
+  const prevState = useSharedValue(state);
 
-  // Flip when the state changes to 'valid'
+  // Pop when letter is typed
   useEffect(() => {
-    if (state === 'valid') {
-      flip.value = withDelay(delay, withTiming(1, { duration: 400 }));
-    } else {
-      flip.value = withTiming(0, { duration: 200 });
-    }
-  }, [state, delay]);
-
-  // Pop when a letter is typed
-  useEffect(() => {
-    if (letter && state === 'filled') {
-      scale.value = withTiming(1.15, { duration: 80 }, () => {
-        scale.value = withTiming(1, { duration: 80 });
+    if (letter && (state === 'typing' || state === 'active')) {
+      scale.value = withSpring(1.08, { damping: 6, stiffness: 300 }, () => {
+        scale.value = withTiming(1, { duration: 100 });
       });
     }
   }, [letter]);
 
-  const animStyle = useAnimatedStyle(() => {
-    const rotateY = interpolate(flip.value, [0, 0.5, 1], [0, 90, 0], Extrapolation.CLAMP);
-    const bg = flip.value < 0.5 ? BG[state] : BG['valid'];
-    return {
-      transform: [{ rotateY: `${rotateY}deg` }, { scale: scale.value }],
-      backgroundColor: bg,
-    };
-  });
+  // Bloom pop when ring is completed
+  useEffect(() => {
+    if (state === 'bloomed' && prevState.value !== 'bloomed') {
+      scale.value = withDelay(delay, withSpring(1.12, { damping: 5, stiffness: 200 }, () => {
+        scale.value = withTiming(1, { duration: 150 });
+      }));
+    }
+    prevState.value = state;
+  }, [state, delay]);
 
-  const fontSize = size * 0.45;
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    backgroundColor: BG[state],
+    borderColor: BORDER[state],
+  }));
+
+  const fontSize = size * 0.42;
 
   return (
-    <Animated.View
-      style={[
-        styles.tile,
-        { width: size, height: size, borderRadius: size * 0.18 },
-        animStyle,
-      ]}
-    >
-      <Text style={[styles.letter, { fontSize, color: TEXT_COLOR[state] }]}>
+    <Animated.View style={[styles.tile, { width: size, height: size * 1.1, borderRadius: size * 0.2 }, animStyle]}>
+      <Text style={[styles.letter, { fontSize, color: TEXT[state] }]}>
         {letter.toUpperCase()}
       </Text>
     </Animated.View>
@@ -97,11 +97,10 @@ const styles = StyleSheet.create({
   tile: {
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.tileBorder,
+    borderWidth: 2.5,
   },
   letter: {
-    fontFamily: Fonts.mono,
     fontWeight: '700',
+    fontFamily: Fonts.mono,
   },
 });

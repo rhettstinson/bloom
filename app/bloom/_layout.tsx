@@ -5,9 +5,10 @@ export default function BloomLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: Colors.surface },
-        headerTintColor: Colors.primary,
+        headerStyle: { backgroundColor: Colors.bg },
+        headerTintColor: Colors.darkGreen,
         headerTitleStyle: { fontWeight: '700' },
+        headerShadowVisible: false,
         contentStyle: { backgroundColor: Colors.bg },
       }}
     />
