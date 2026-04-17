@@ -67,7 +67,7 @@ export default function BloomScreen() {
   const [input, setInput]       = useState('');
   const [inputError, setInputError] = useState('');
   const [gameKey, setGameKey]   = useState(0);
-  const [devOpen, setDevOpen]   = useState(false);
+  const [seedModal, setSeedModal] = useState(false);
   const devSeedRef              = useRef('');
   const inputRef                = useRef<TextInput>(null);
 
@@ -115,6 +115,29 @@ export default function BloomScreen() {
   }, []);
 
   useEffect(() => { loadPuzzle(fetchTodaysPuzzle); }, [loadPuzzle]);
+
+  // Direct seed loader — bypasses loading-state complexity, always starts fresh
+  const loadSeed = useCallback(async (seed: string) => {
+    setSeedModal(false);
+    devSeedRef.current = '';
+    try {
+      const puzzle = await fetchPuzzleBySeed(seed.trim().toUpperCase());
+      setGameKey(k => k + 1);
+      setGame({
+        puzzle,
+        words: [],
+        currentRing: 1,
+        hintsUsed: 0,
+        revealedLetters: [],
+        won: false,
+      });
+      setInput('');
+      setInputError('');
+      setError('');
+    } catch (e) {
+      setError(`Seed "${seed}" not found. Available: ACE LAP NAG EAR RAN TOE ORE PIE ALE ODE APE ARC ARM ART ASH BAD BAG BAN BAR BAT`);
+    }
+  }, []);
 
   // ── Derived state ────────────────────────────────────────────────────
 
@@ -229,6 +252,11 @@ export default function BloomScreen() {
         headerStyle: { backgroundColor: Colors.bg },
         headerTintColor: Colors.darkGreen,
         headerShadowVisible: false,
+        headerRight: () => (
+          <TouchableOpacity onPress={() => { setSeedModal(true); devSeedRef.current = ''; }} style={{ paddingHorizontal: 12 }}>
+            <Text style={{ color: Colors.darkGreen, fontWeight: '700', fontSize: Fonts.size.sm, letterSpacing: 1.5 }}>NEW</Text>
+          </TouchableOpacity>
+        ),
       }} />
 
       <ScrollView
@@ -340,42 +368,40 @@ export default function BloomScreen() {
           </View>
         )}
 
-        {/* Dev seed switcher */}
-        {__DEV__ && (
-          <View style={styles.devBox}>
-            <TouchableOpacity onPress={() => { setDevOpen(o => !o); devSeedRef.current = ''; }}>
-              <Text style={styles.devBtnText}>DEV: change seed</Text>
-            </TouchableOpacity>
-            {devOpen && (
-              <View style={styles.devRow}>
-                <TextInput
-                  style={styles.devInput}
-                  defaultValue=""
-                  onChangeText={t => { devSeedRef.current = t.toUpperCase(); }}
-                  placeholder="ACE"
-                  placeholderTextColor={Colors.textMuted}
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  maxLength={3}
-                  onSubmitEditing={() => {
-                    const s = devSeedRef.current;
-                    if (s.length === 3) { setDevOpen(false); loadPuzzle(() => fetchPuzzleBySeed(s), true); }
-                  }}
-                />
-                <TouchableOpacity
-                  style={styles.devGo}
-                  onPress={() => {
-                    const s = devSeedRef.current;
-                    if (s.length === 3) { setDevOpen(false); loadPuzzle(() => fetchPuzzleBySeed(s), true); }
-                  }}
-                >
-                  <Text style={styles.devGoText}>GO</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
       </ScrollView>
+
+      {/* Seed picker modal */}
+      {seedModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Choose a seed word</Text>
+            <TextInput
+              style={styles.modalInput}
+              defaultValue=""
+              onChangeText={t => { devSeedRef.current = t.toUpperCase(); }}
+              placeholder="e.g. EAR"
+              placeholderTextColor={Colors.textMuted}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              autoFocus
+              maxLength={3}
+              onSubmitEditing={() => loadSeed(devSeedRef.current)}
+            />
+            <Text style={styles.modalHint}>
+              ACE · LAP · NAG · EAR · RAN · TOE · ORE · PIE · ALE · ODE{'\n'}
+              APE · ARC · ARM · ART · ASH · BAD · BAG · BAN · BAR · BAT
+            </Text>
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setSeedModal(false)}>
+                <Text style={styles.modalBtnCancelText}>CANCEL</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnGo} onPress={() => loadSeed(devSeedRef.current)}>
+                <Text style={styles.modalBtnGoText}>LOAD</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -554,46 +580,86 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
 
-  // Dev
-  devBox: {
-    marginTop: Spacing.xl,
+  // Seed picker modal
+  modalOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: Spacing.xs,
   },
-  devBtnText: {
-    color: Colors.textMuted,
-    fontSize: Fonts.size.xs,
-    textDecorationLine: 'underline',
-  },
-  devRow: {
-    flexDirection: 'row',
-    gap: Spacing.xs,
-    marginTop: Spacing.xs,
-  },
-  devInput: {
-    backgroundColor: Colors.tileBg,
+  modal: {
+    backgroundColor: Colors.bg,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    width: 300,
+    alignItems: 'center',
     borderWidth: 1.5,
     borderColor: Colors.tileBorder,
-    borderRadius: Radius.sm,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  modalTitle: {
+    color: Colors.darkGreen,
+    fontWeight: '700',
+    fontSize: Fonts.size.lg,
+    marginBottom: Spacing.md,
+  },
+  modalInput: {
+    backgroundColor: Colors.tileBg,
+    borderWidth: 2,
+    borderColor: Colors.tileActiveBorder,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     color: Colors.darkGreen,
     fontFamily: Fonts.mono,
-    fontSize: Fonts.size.md,
-    width: 60,
+    fontSize: Fonts.size.xxl,
+    width: '100%',
     textAlign: 'center',
-    letterSpacing: 4,
+    letterSpacing: 8,
+    marginBottom: Spacing.sm,
   },
-  devGo: {
-    backgroundColor: Colors.midGreen,
-    borderRadius: Radius.sm,
-    paddingHorizontal: Spacing.sm,
-    justifyContent: 'center',
-  },
-  devGoText: {
-    color: '#fff',
-    fontWeight: '700',
+  modalHint: {
+    color: Colors.textMuted,
     fontSize: Fonts.size.xs,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: Spacing.md,
+  },
+  modalBtns: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    width: '100%',
+  },
+  modalBtnCancel: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: Colors.tileBorder,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+  },
+  modalBtnCancelText: {
+    color: Colors.textMuted,
+    fontWeight: '700',
+    fontSize: Fonts.size.sm,
     letterSpacing: 1,
+  },
+  modalBtnGo: {
+    flex: 1,
+    backgroundColor: Colors.darkGreen,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+  },
+  modalBtnGoText: {
+    color: Colors.bg,
+    fontWeight: '700',
+    fontSize: Fonts.size.sm,
+    letterSpacing: 1.5,
   },
 });
