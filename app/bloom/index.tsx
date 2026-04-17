@@ -72,14 +72,17 @@ export default function BloomScreen() {
 
   // ── Load puzzle ──────────────────────────────────────────────────────
 
-  const loadPuzzle = useCallback(async (fetcher: () => Promise<PuzzleResponse>) => {
+  const loadPuzzle = useCallback(async (
+    fetcher: () => Promise<PuzzleResponse>,
+    fresh = false,
+  ) => {
     setLoading(true);
     setError('');
     setInput('');
     setInputError('');
     try {
       const puzzle = await fetcher();
-      const saved = await loadProgress(puzzle.dayIndex);
+      const saved = fresh ? null : await loadProgress(puzzle.dayIndex);
       if (saved && saved.seed === puzzle.seed) {
         setGame({
           puzzle,
@@ -99,8 +102,8 @@ export default function BloomScreen() {
           won: false,
         });
       }
-    } catch {
-      setError('Could not load puzzle.\nMake sure the API server is running:\n  cd bloom-api && npm start');
+    } catch (e) {
+      setError(`Could not load puzzle.\nMake sure the API server is running:\n  cd bloom-api && npm start\n\n${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setLoading(false);
     }
@@ -346,7 +349,7 @@ export default function BloomScreen() {
                   onPress={() => {
                     if (devSeed.length === 3) {
                       setDevOpen(false);
-                      loadPuzzle(() => fetchPuzzleBySeed(devSeed));
+                      loadPuzzle(() => fetchPuzzleBySeed(devSeed), true);
                     }
                   }}
                 >
