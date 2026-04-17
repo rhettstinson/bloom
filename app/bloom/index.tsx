@@ -5,7 +5,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -67,6 +66,8 @@ export default function BloomScreen() {
   const [game, setGame]         = useState<GameState | null>(null);
   const [input, setInput]       = useState('');
   const [inputError, setInputError] = useState('');
+  const [devOpen, setDevOpen]   = useState(false);
+  const [devSeed, setDevSeed]   = useState('');
   const inputRef = useRef<TextInput>(null);
 
   // ── Load puzzle ──────────────────────────────────────────────────────
@@ -324,12 +325,36 @@ export default function BloomScreen() {
 
         {/* Dev seed switcher */}
         {__DEV__ && (
-          <TouchableOpacity
-            style={styles.devBtn}
-            onPress={() => Alert.prompt('Load seed', 'Enter a 3-letter seed', s => loadPuzzle(() => fetchPuzzleBySeed(s)))}
-          >
-            <Text style={styles.devBtnText}>DEV: change seed</Text>
-          </TouchableOpacity>
+          <View style={styles.devBox}>
+            <TouchableOpacity onPress={() => { setDevOpen(o => !o); setDevSeed(''); }}>
+              <Text style={styles.devBtnText}>DEV: change seed</Text>
+            </TouchableOpacity>
+            {devOpen && (
+              <View style={styles.devRow}>
+                <TextInput
+                  style={styles.devInput}
+                  value={devSeed}
+                  onChangeText={t => setDevSeed(t.toUpperCase())}
+                  placeholder="ACE"
+                  placeholderTextColor={Colors.textMuted}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  maxLength={3}
+                />
+                <TouchableOpacity
+                  style={styles.devGo}
+                  onPress={() => {
+                    if (devSeed.length === 3) {
+                      setDevOpen(false);
+                      loadPuzzle(() => fetchPuzzleBySeed(devSeed));
+                    }
+                  }}
+                >
+                  <Text style={styles.devGoText}>GO</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         )}
       </ScrollView>
     </KeyboardAvoidingView>
@@ -511,15 +536,45 @@ const styles = StyleSheet.create({
   },
 
   // Dev
-  devBtn: {
+  devBox: {
     marginTop: Spacing.xl,
-    padding: Spacing.sm,
-    borderWidth: 1,
-    borderColor: Colors.tileBorder,
-    borderRadius: Radius.sm,
+    alignItems: 'center',
+    gap: Spacing.xs,
   },
   devBtnText: {
     color: Colors.textMuted,
     fontSize: Fonts.size.xs,
+    textDecorationLine: 'underline',
+  },
+  devRow: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+  },
+  devInput: {
+    backgroundColor: Colors.tileBg,
+    borderWidth: 1.5,
+    borderColor: Colors.tileBorder,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    color: Colors.darkGreen,
+    fontFamily: Fonts.mono,
+    fontSize: Fonts.size.md,
+    width: 60,
+    textAlign: 'center',
+    letterSpacing: 4,
+  },
+  devGo: {
+    backgroundColor: Colors.midGreen,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.sm,
+    justifyContent: 'center',
+  },
+  devGoText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: Fonts.size.xs,
+    letterSpacing: 1,
   },
 });
