@@ -84,3 +84,23 @@ export const TOTAL_RINGS = 4; // rings 1–4 (4-letter → 7-letter words)
 export function ringForWord(word: string): number {
   return word.length - 3;
 }
+
+/**
+ * DFS through the graph to find any valid path from startWord to a 7-letter word.
+ * Returns the words FROM startWord's children up to (and including) the 7-letter word.
+ * Returns [] if startWord is already 7 letters.
+ * Returns null if no path exists (should not happen in a well-formed puzzle graph).
+ */
+export function findPathToBloom(startWord: string, graph: Graph): string[] | null {
+  if (startWord.length >= 7) return [];
+  function dfs(word: string): string[] | null {
+    const children = graph[word.toLowerCase()] ?? [];
+    for (const child of children) {
+      if (child.length === 7) return [child];
+      const rest = dfs(child);
+      if (rest !== null) return [child, ...rest];
+    }
+    return null;
+  }
+  return dfs(startWord.toLowerCase());
+}

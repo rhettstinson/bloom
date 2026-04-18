@@ -4,6 +4,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -19,7 +20,7 @@ import * as Haptics from 'expo-haptics';
 import RingRow from '../../components/RingRow';
 import FlowerGrowth from '../../components/FlowerGrowth';
 import { fetchTodaysPuzzle, fetchPuzzleBySeed, type PuzzleResponse } from '../../lib/api';
-import { isValidMove, findNewLetter, type Graph } from '../../lib/gameLogic';
+import { isValidMove, isAnagramPlusOne, findNewLetter, findPathToBloom, type Graph } from '../../lib/gameLogic';
 import { loadProgress, saveProgress, recordResult, loadStats, type Stats } from '../../lib/storage';
 import { Colors, Fonts, Spacing, Radius } from '../../constants/theme';
 
@@ -35,6 +36,7 @@ interface GameState {
   hintsUsed: number;
   revealedLetters: string[]; // letters revealed by hints for current ring
   won: boolean;
+  lost: boolean;             // true if player submitted a dead-end word
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -71,8 +73,10 @@ export default function BloomScreen() {
   const [seedModal, setSeedModal] = useState(false);
   const [gardenModal, setGardenModal] = useState(false);
   const [gardenStats, setGardenStats] = useState<Stats | null>(null);
+  const [streak, setStreak]     = useState(0);
   const devSeedRef              = useRef('');
   const inputRef                = useRef<TextInput>(null);
+  const shakeAnim               = useRef(new Animated.Value(0)).current;
 
   // ── Load puzzle ──────────────────────────────────────────────────────
 
@@ -99,6 +103,7 @@ export default function BloomScreen() {
           hintsUsed: saved.hintsUsed,
           revealedLetters: [],
           won: saved.won,
+          lost: saved.done && !saved.won,
         });
       } else {
         setGame({
@@ -108,6 +113,7 @@ export default function BloomScreen() {
           hintsUsed: 0,
           revealedLetters: [],
           won: false,
+          lost: false,
         });
       }
     } catch (e) {
@@ -118,6 +124,18 @@ export default function BloomScreen() {
   }, []);
 
   useEffect(() => { loadPuzzle(fetchTodaysPuzzle); }, [loadPuzzle]);
+  useEffect(() => { loadStats().then(s => setStreak(s.streak)); }, []);
+
+  const triggerShake = useCallback(() => {
+    shakeAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 9, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -9, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 7, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -7, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 55, useNativeDriver: true }),
+    ]).start();
+  }, [shakeAnim]);
 
   // Direct seed loader — bypasses loading-state complexity, always starts fresh
   const loadSeed = useCallback(async (seed: string) => {
@@ -133,6 +151,7 @@ export default function BloomScreen() {
         hintsUsed: 0,
         revealedLetters: [],
         won: false,
+        lost: false,
       });
       setInput('');
       setInputError('');
@@ -158,7 +177,7 @@ export default function BloomScreen() {
   };
 
   const ringsComplete = game ? Math.min(game.currentRing - 1, TOTAL_RINGS) : 0;
-  const isPlaying = !!game && game.currentRing <= TOTAL_RINGS;
+  const isPlaying = !!game && game.currentRing <= TOTAL_RINGS && !game.lost;
 
   // ── Submit ───────────────────────────────────────────────────────────
 
@@ -167,26 +186,54 @@ export default function BloomScreen() {
     const candidate = input.trim().toLowerCase();
     if (!candidate) return;
 
-    if (!isValidMove(currentWord(), candidate, game.puzzle.graph)) {
-      const reason = !(candidate in game.puzzle.graph)
-        ? 'Not a valid word or no path to bloom from here'
-        : 'Must use all previous letters plus exactly one new letter';
-      setInputError(reason);
+    // Error type 1: not a real word in the graph at all
+    if (!(candidate in game.puzzle.graph)) {
+      setInputError('Not a word in the dictionary');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      triggerShake();
       return;
     }
 
-    // Block dead-end words on non-final rings (ring 4 words have no children by design)
+    // Error type 2: valid word but violates the anagram+1 rule
+    if (!isAnagramPlusOne(currentWord(), candidate)) {
+      setInputError('Must use all previous letters plus exactly one new letter');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      triggerShake();
+      return;
+    }
+
+    // Error type 3: valid word and valid rule, but dead end on non-final ring — lose game
     const isFinalRing = game.currentRing === TOTAL_RINGS;
     if (!isFinalRing) {
       const children = game.puzzle.graph[candidate];
       if (!children || children.length === 0) {
-        setInputError('Dead end — no path to full bloom from this word');
+        const newWords = [...game.words, candidate];
+        setGame({
+          ...game,
+          words: newWords,
+          currentRing: TOTAL_RINGS + 1,
+          revealedLetters: [],
+          won: false,
+          lost: true,
+        });
+        setInput('');
+        setInputError('');
+        saveProgress({
+          dayIndex: game.puzzle.dayIndex,
+          seed: game.puzzle.seed,
+          words: newWords,
+          hintsUsed: game.hintsUsed,
+          done: true,
+          won: false,
+        });
+        recordResult(game.puzzle.dayIndex, false, game.hintsUsed)
+          .then(s => setStreak(s.streak));
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
     }
 
+    // Valid move — advance ring
     setInputError('');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -198,8 +245,9 @@ export default function BloomScreen() {
       ...game,
       words: newWords,
       currentRing: newRing,
-      revealedLetters: [],   // reset hints for new ring
+      revealedLetters: [],
       won,
+      lost: false,
     };
     setGame(next);
     setInput('');
@@ -214,10 +262,11 @@ export default function BloomScreen() {
     });
 
     if (won) {
-      recordResult(game.puzzle.dayIndex, true, game.hintsUsed);
+      recordResult(game.puzzle.dayIndex, true, game.hintsUsed)
+        .then(s => setStreak(s.streak));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-  }, [game, input, isPlaying]);
+  }, [game, input, isPlaying, triggerShake]);
 
   // ── Hint ─────────────────────────────────────────────────────────────
 
@@ -292,6 +341,13 @@ export default function BloomScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Streak badge */}
+        {streak > 0 && (
+          <View style={styles.streakBadge}>
+            <Text style={styles.streakText}>🔥 {streak} day streak</Text>
+          </View>
+        )}
+
         {/* Main game area: stem + rings */}
         <View style={styles.gameArea}>
           <FlowerGrowth ringsComplete={ringsComplete} />
@@ -341,7 +397,7 @@ export default function BloomScreen() {
             {inputError ? <Text style={styles.errorText}>{inputError}</Text> : null}
 
             {/* Input row */}
-            <View style={styles.inputRow}>
+            <Animated.View style={[styles.inputRow, { transform: [{ translateX: shakeAnim }] }]}>
               <TextInput
                 ref={inputRef}
                 style={styles.input}
@@ -358,7 +414,7 @@ export default function BloomScreen() {
               <TouchableOpacity style={styles.btnEnter} onPress={submitWord}>
                 <Text style={styles.btnEnterText}>ENTER</Text>
               </TouchableOpacity>
-            </View>
+            </Animated.View>
 
             {/* Hint button */}
             {game.hintsUsed < MAX_HINTS ? (
@@ -375,8 +431,8 @@ export default function BloomScreen() {
               </View>
             )}
           </View>
-        ) : (
-          /* Won / done state */
+        ) : game.won ? (
+          /* ── Win screen ───────────────────────────────────────────────── */
           <View style={styles.doneBox}>
             <Text style={styles.doneTitle}>Full Bloom! 🌸</Text>
             <Text style={styles.doneSub}>
@@ -384,7 +440,6 @@ export default function BloomScreen() {
               {'\n'}Day {game.puzzle.dayIndex} · Seed: {game.puzzle.seed.toUpperCase()}
             </Text>
 
-            {/* Victory word chain */}
             <View style={styles.chain}>
               {[game.puzzle.seed.toLowerCase(), ...game.words].map((w, i) => {
                 const prev = i === 0 ? '' : [game.puzzle.seed.toLowerCase(), ...game.words][i - 1];
@@ -403,6 +458,84 @@ export default function BloomScreen() {
               <Text style={styles.btnPrimaryText}>TODAY'S PUZZLE</Text>
             </TouchableOpacity>
           </View>
+        ) : (
+          /* ── Loss screen ──────────────────────────────────────────────── */
+          (() => {
+            const deadWord = game.words[game.words.length - 1] ?? '';
+            const correctWords = game.words.slice(0, -1);
+            const parentWord = correctWords.length > 0
+              ? correctWords[correctWords.length - 1]
+              : game.puzzle.seed;
+            const suggested = findPathToBloom(parentWord, game.puzzle.graph) ?? [];
+            const allCorrect = [game.puzzle.seed.toLowerCase(), ...correctWords];
+
+            return (
+              <View style={styles.lossBox}>
+                <Text style={styles.lossTitle}>Dead End 🥀</Text>
+                <Text style={styles.lossSub}>
+                  "{deadWord.toUpperCase()}" leads nowhere.
+                  {'\n'}Streak reset.
+                </Text>
+
+                {/* Player's path up to dead end */}
+                <View style={styles.chain}>
+                  {allCorrect.map((w, i) => {
+                    const prev = i === 0 ? '' : allCorrect[i - 1];
+                    const newLetter = i === 0 ? '' : findNewLetter(prev, w);
+                    return (
+                      <View key={`c${i}`} style={styles.chainRow}>
+                        <Text style={styles.chainEmoji}>{i === 0 ? '🌱' : '✅'}</Text>
+                        <Text style={styles.chainWord}>{w.toUpperCase()}</Text>
+                        {newLetter ? <Text style={styles.chainNew}>+{newLetter.toUpperCase()}</Text> : null}
+                      </View>
+                    );
+                  })}
+                  {/* Dead-end word */}
+                  <View style={styles.chainRow}>
+                    <Text style={styles.chainEmoji}>🥀</Text>
+                    <Text style={[styles.chainWord, styles.chainWordDead]}>
+                      {deadWord.toUpperCase()}
+                    </Text>
+                    <Text style={[styles.chainNew, styles.chainNewDead]}>
+                      +{findNewLetter(parentWord, deadWord).toUpperCase()}
+                    </Text>
+                  </View>
+
+                  {/* Suggested continuation */}
+                  {suggested.length > 0 && (
+                    <>
+                      <View style={styles.lossDivider}>
+                        <Text style={styles.lossDividerText}>one valid path</Text>
+                      </View>
+                      {suggested.map((w, i) => {
+                        const prev = i === 0 ? parentWord : suggested[i - 1];
+                        const newLetter = findNewLetter(prev, w);
+                        return (
+                          <View key={`s${i}`} style={styles.chainRow}>
+                            <Text style={styles.chainEmoji}>
+                              {w.length === 7 ? '🌸' : '💡'}
+                            </Text>
+                            <Text style={[styles.chainWord, styles.chainWordSuggest]}>
+                              {w.toUpperCase()}
+                            </Text>
+                            {newLetter ? (
+                              <Text style={[styles.chainNew, styles.chainNewSuggest]}>
+                                +{newLetter.toUpperCase()}
+                              </Text>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+                    </>
+                  )}
+                </View>
+
+                <TouchableOpacity style={styles.btnPrimary} onPress={() => loadPuzzle(fetchTodaysPuzzle, true)}>
+                  <Text style={styles.btnPrimaryText}>TRY AGAIN</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })()
         )}
 
       </ScrollView>
@@ -523,6 +656,23 @@ const styles = StyleSheet.create({
   content: {
     paddingVertical: Spacing.lg,
     alignItems: 'center',
+  },
+
+  // Streak badge
+  streakBadge: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 5,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.goldPale,
+    borderWidth: 1,
+    borderColor: Colors.gold,
+    marginBottom: Spacing.md,
+  },
+  streakText: {
+    color: Colors.darkGreen,
+    fontSize: Fonts.size.sm,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 
   // Game area: stem + rings side-by-side
@@ -673,6 +823,60 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: Radius.full,
+  },
+  chainWordDead: {
+    color: '#c0392b',
+    textDecorationLine: 'line-through',
+  },
+  chainNewDead: {
+    color: '#c0392b',
+    backgroundColor: '#fde8e8',
+  },
+  chainWordSuggest: {
+    color: Colors.textMuted,
+  },
+  chainNewSuggest: {
+    color: Colors.textMuted,
+    backgroundColor: Colors.surface,
+  },
+
+  // Loss screen
+  lossBox: {
+    marginTop: Spacing.lg,
+    backgroundColor: '#fff8f8',
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    width: '90%',
+    maxWidth: 360,
+    borderWidth: 1.5,
+    borderColor: '#e8c0c0',
+  },
+  lossTitle: {
+    color: '#c0392b',
+    fontSize: Fonts.size.xxl,
+    fontWeight: '700',
+    marginBottom: Spacing.xs,
+  },
+  lossSub: {
+    color: Colors.textMuted,
+    fontSize: Fonts.size.sm,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: Spacing.md,
+  },
+  lossDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: Spacing.sm,
+  },
+  lossDividerText: {
+    color: Colors.textMuted,
+    fontSize: Fonts.size.xs,
+    letterSpacing: 1,
+    fontStyle: 'italic',
+    backgroundColor: '#fff8f8',
+    paddingHorizontal: 6,
   },
   btnPrimary: {
     backgroundColor: Colors.darkGreen,
