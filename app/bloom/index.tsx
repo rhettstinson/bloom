@@ -28,15 +28,17 @@ import { Colors, Fonts, Spacing, Radius } from '../../constants/theme';
 
 const TOTAL_RINGS = 4;
 const MAX_HINTS = 3;
+const MAX_MISSES = 4;
 
 interface GameState {
   puzzle: PuzzleResponse;
   words: string[];           // completed ring words [ring1, ring2, ring3, ring4]
   currentRing: number;       // 1–4 while playing, 5 = done
   hintsUsed: number;
+  misses: number;            // invalid submissions used (0–MAX_MISSES)
   revealedLetters: string[]; // letters revealed by hints for current ring
   won: boolean;
-  lost: boolean;             // true if player submitted a dead-end word
+  lost: boolean;             // true when misses === MAX_MISSES or dead-end submitted
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -73,6 +75,7 @@ export default function BloomScreen() {
   const [seedModal, setSeedModal] = useState(false);
   const [gardenModal, setGardenModal] = useState(false);
   const [gardenStats, setGardenStats] = useState<Stats | null>(null);
+  const [howToModal, setHowToModal] = useState(false);
   const [streak, setStreak]     = useState(0);
   const devSeedRef              = useRef('');
   const shakeAnim               = useRef(new Animated.Value(0)).current;
@@ -100,6 +103,7 @@ export default function BloomScreen() {
           words: saved.words,
           currentRing: saved.done ? TOTAL_RINGS + 1 : saved.words.length + 1,
           hintsUsed: saved.hintsUsed,
+          misses: saved.misses ?? 0,
           revealedLetters: [],
           won: saved.won,
           lost: saved.done && !saved.won,
@@ -110,6 +114,7 @@ export default function BloomScreen() {
           words: [],
           currentRing: 1,
           hintsUsed: 0,
+          misses: 0,
           revealedLetters: [],
           won: false,
           lost: false,
@@ -148,6 +153,7 @@ export default function BloomScreen() {
         words: [],
         currentRing: 1,
         hintsUsed: 0,
+        misses: 0,
         revealedLetters: [],
         won: false,
         lost: false,
@@ -206,54 +212,66 @@ export default function BloomScreen() {
     const candidate = input.trim().toLowerCase();
     if (!candidate) return;
 
-    // Error type 1: not a real word in the graph at all
-    if (!(candidate in game.puzzle.graph)) {
-      setInputError('Not a word in the dictionary');
+    // ── Unified miss handler ──────────────────────────────────────────
+    const recordMiss = (msg: string) => {
+      const newMisses = game.misses + 1;
+      setInputError(msg);
+      setInput('');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       triggerShake();
-      return;
-    }
 
-    // Error type 2: valid word but violates the anagram+1 rule
-    if (!isAnagramPlusOne(currentWord(), candidate)) {
-      setInputError('Must use all previous letters plus exactly one new letter');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      triggerShake();
-      return;
-    }
-
-    // Error type 3: valid word and valid rule, but dead end on non-final ring — lose game
-    const isFinalRing = game.currentRing === TOTAL_RINGS;
-    if (!isFinalRing) {
-      const children = game.puzzle.graph[candidate];
-      if (!children || children.length === 0) {
-        const newWords = [...game.words, candidate];
-        setGame({
-          ...game,
-          words: newWords,
-          currentRing: TOTAL_RINGS + 1,
-          revealedLetters: [],
-          won: false,
-          lost: true,
-        });
-        setInput('');
+      if (newMisses >= MAX_MISSES) {
+        // Out of lives — end game
+        setGame({ ...game, misses: newMisses, currentRing: TOTAL_RINGS + 1, won: false, lost: true });
         setInputError('');
         saveProgress({
           dayIndex: game.puzzle.dayIndex,
           seed: game.puzzle.seed,
-          words: newWords,
+          words: game.words,
           hintsUsed: game.hintsUsed,
+          misses: newMisses,
           done: true,
           won: false,
         });
         recordResult(game.puzzle.dayIndex, false, game.hintsUsed)
           .then(s => setStreak(s.streak));
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } else {
+        setGame({ ...game, misses: newMisses });
+        saveProgress({
+          dayIndex: game.puzzle.dayIndex,
+          seed: game.puzzle.seed,
+          words: game.words,
+          hintsUsed: game.hintsUsed,
+          misses: newMisses,
+          done: false,
+          won: false,
+        });
+      }
+    };
+
+    // Error type 1: not a real word in the graph at all
+    if (!(candidate in game.puzzle.graph)) {
+      recordMiss('Not a word in the dictionary');
+      return;
+    }
+
+    // Error type 2: valid word but violates the anagram+1 rule
+    if (!isAnagramPlusOne(currentWord(), candidate)) {
+      recordMiss('Must use all previous letters plus exactly one new letter');
+      return;
+    }
+
+    // Error type 3: valid word and valid rule, but dead end on non-final ring
+    const isFinalRing = game.currentRing === TOTAL_RINGS;
+    if (!isFinalRing) {
+      const children = game.puzzle.graph[candidate];
+      if (!children || children.length === 0) {
+        recordMiss('That word leads nowhere — no path to full bloom');
         return;
       }
     }
 
-    // Valid move — advance ring
+    // ── Valid move — advance ring ─────────────────────────────────────
     setInputError('');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -277,6 +295,7 @@ export default function BloomScreen() {
       seed: game.puzzle.seed,
       words: newWords,
       hintsUsed: game.hintsUsed,
+      misses: game.misses,
       done: won,
       won,
     });
@@ -345,6 +364,9 @@ export default function BloomScreen() {
         ),
         headerRight: () => (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <TouchableOpacity onPress={() => setHowToModal(true)} style={{ paddingHorizontal: 10 }}>
+              <Text style={{ color: Colors.darkGreen, fontWeight: '700', fontSize: 18 }}>?</Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={openGarden} style={{ paddingHorizontal: 10 }}>
               <Text style={{ fontSize: 20 }}>🌱</Text>
             </TouchableOpacity>
@@ -394,17 +416,31 @@ export default function BloomScreen() {
           </View>
         </View>
 
+        {/* Miss indicator — always visible while a game is loaded */}
+        {game && (
+          <View style={styles.missRow}>
+            {Array.from({ length: MAX_MISSES }).map((_, i) => (
+              <View key={i} style={[styles.missDot, i < game.misses && styles.missDotUsed]} />
+            ))}
+          </View>
+        )}
+
         {/* Input area */}
         {isPlaying ? (
           <View style={styles.inputArea}>
+            {/* Word prompt */}
+            <Text style={styles.wordPrompt}>
+              {currentWord().toUpperCase()} + one letter
+            </Text>
+
             {/* Hint display */}
             {game.revealedLetters.length > 0 && (
               <Text style={styles.hintText}>
-                Hint: contains {game.revealedLetters.map(l => `"${l}"`).join(', ')}
+                hint: contains {game.revealedLetters.map(l => `"${l}"`).join(', ')}
               </Text>
             )}
 
-            {/* Error — shakes the button row */}
+            {/* Error — shakes with the error message */}
             {inputError ? (
               <Animated.Text style={[styles.errorText, { transform: [{ translateX: shakeAnim }] }]}>
                 {inputError}
@@ -468,7 +504,9 @@ export default function BloomScreen() {
               <View style={styles.lossBox}>
                 <Text style={styles.lossTitle}>Dead End 🥀</Text>
                 <Text style={styles.lossSub}>
-                  "{deadWord.toUpperCase()}" leads nowhere.
+                  {game.misses >= MAX_MISSES
+                    ? `You used all ${MAX_MISSES} attempts.`
+                    : `"${deadWord.toUpperCase()}" leads nowhere.`}
                   {'\n'}Streak reset.
                 </Text>
 
@@ -639,6 +677,63 @@ export default function BloomScreen() {
           </View>
         </View>
       )}
+
+      {/* How-to-play modal */}
+      {howToModal && (
+        <View style={styles.modalOverlay}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.lg }}>
+            <View style={[styles.modal, { width: 320 }]}>
+              <Text style={[styles.modalTitle, { fontFamily: Fonts.mono }]}>how to play</Text>
+
+              {/* Goal */}
+              <Text style={styles.howToSection}>Goal</Text>
+              <Text style={styles.howToBody}>
+                Grow a word from 3 letters to 7 letters, one letter at a time.
+              </Text>
+
+              {/* Rules */}
+              <Text style={styles.howToSection}>Rules</Text>
+              <Text style={styles.howToBody}>
+                Each guess must contain all the letters from the previous word, plus exactly one new letter — rearranged in any order.
+              </Text>
+
+              {/* Example chain */}
+              <View style={styles.howToChain}>
+                {['ACE','RACE','TRACE','CRATES','SCATTER'].map((w, i, arr) => (
+                  <View key={w} style={styles.howToChainRow}>
+                    <Text style={styles.howToChainWord}>{w}</Text>
+                    {i < arr.length - 1 && <Text style={styles.howToChainArrow}>→</Text>}
+                  </View>
+                ))}
+              </View>
+
+              {/* Misses */}
+              <Text style={styles.howToSection}>Attempts</Text>
+              <Text style={styles.howToBody}>
+                You have {MAX_MISSES} attempts per puzzle. Each invalid submission uses one.
+              </Text>
+              <View style={[styles.missRow, { marginVertical: Spacing.xs }]}>
+                {Array.from({ length: MAX_MISSES }).map((_, i) => (
+                  <View key={i} style={styles.missDot} />
+                ))}
+              </View>
+
+              {/* Hints */}
+              <Text style={styles.howToSection}>Hints</Text>
+              <Text style={styles.howToBody}>
+                Use up to {MAX_HINTS} hints per puzzle. Each hint reveals one possible new letter.
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.modalBtnGo, { marginTop: Spacing.md, width: '100%' }]}
+                onPress={() => setHowToModal(false)}
+              >
+                <Text style={styles.modalBtnGoText}>GOT IT</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      )}
     </View>
   );
 }
@@ -662,6 +757,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
+  // Miss indicator
+  missRow: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: Spacing.md,
+    marginBottom: 2,
+  },
+  missDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Colors.tileBorder,
+    backgroundColor: 'transparent',
+  },
+  missDotUsed: {
+    backgroundColor: Colors.error,
+    borderColor: Colors.error,
+  },
+
   // Game area: flower + rings side-by-side
   gameArea: {
     flexDirection: 'row',
@@ -678,10 +794,17 @@ const styles = StyleSheet.create({
 
   // Input
   inputArea: {
-    marginTop: Spacing.lg,
+    marginTop: Spacing.sm,
     alignItems: 'center',
     width: '100%',
     paddingHorizontal: Spacing.lg,
+  },
+  wordPrompt: {
+    color: Colors.textMuted,
+    fontFamily: Fonts.mono,
+    fontSize: Fonts.size.sm,
+    letterSpacing: 1.5,
+    marginBottom: Spacing.xs,
   },
   hintText: {
     color: Colors.gold,
@@ -1009,5 +1132,53 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginVertical: Spacing.md,
     lineHeight: 20,
+  },
+
+  // How-to-play modal
+  howToSection: {
+    color: Colors.darkGreen,
+    fontWeight: '700',
+    fontSize: Fonts.size.sm,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    alignSelf: 'flex-start',
+    marginTop: Spacing.md,
+    marginBottom: 3,
+  },
+  howToBody: {
+    color: Colors.textMuted,
+    fontSize: Fonts.size.sm,
+    lineHeight: 19,
+    alignSelf: 'flex-start',
+  },
+  howToChain: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: Spacing.xs,
+    alignSelf: 'flex-start',
+  },
+  howToChainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  howToChainWord: {
+    color: Colors.darkGreen,
+    fontFamily: Fonts.mono,
+    fontWeight: '700',
+    fontSize: Fonts.size.xs,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: Colors.tileBorder,
+    letterSpacing: 1,
+  },
+  howToChainArrow: {
+    color: Colors.textMuted,
+    fontSize: Fonts.size.xs,
   },
 });

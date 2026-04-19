@@ -20,6 +20,7 @@ export interface DayProgress {
   seed: string;
   words: string[];       // submitted words (ring 1–4)
   hintsUsed: number;
+  misses: number;        // invalid submissions used (0–4)
   done: boolean;
   won: boolean;
 }
@@ -80,7 +81,8 @@ export async function loadProgress(dayIndex: number): Promise<DayProgress | null
   try {
     const raw = await AsyncStorage.getItem(PLAY_KEY(dayIndex));
     if (!raw) return null;
-    return JSON.parse(raw) as DayProgress;
+    const parsed = JSON.parse(raw);
+    return { misses: 0, ...parsed } as DayProgress; // default misses for old saves
   } catch {
     return null;
   }
