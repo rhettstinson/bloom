@@ -6,8 +6,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,6 +18,7 @@ import { Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import RingRow from '../../components/RingRow';
 import FlowerGrowth from '../../components/FlowerGrowth';
+import BloomKeyboard from '../../components/BloomKeyboard';
 import { fetchTodaysPuzzle, fetchPuzzleBySeed, type PuzzleResponse } from '../../lib/api';
 import { isValidMove, isAnagramPlusOne, findNewLetter, findPathToBloom, type Graph } from '../../lib/gameLogic';
 import { loadProgress, saveProgress, recordResult, loadStats, type Stats } from '../../lib/storage';
@@ -76,7 +75,6 @@ export default function BloomScreen() {
   const [gardenStats, setGardenStats] = useState<Stats | null>(null);
   const [streak, setStreak]     = useState(0);
   const devSeedRef              = useRef('');
-  const inputRef                = useRef<TextInput>(null);
   const shakeAnim               = useRef(new Animated.Value(0)).current;
 
   // ── Load puzzle ──────────────────────────────────────────────────────
@@ -185,6 +183,21 @@ export default function BloomScreen() {
 
   const ringsComplete = game ? Math.min(game.currentRing - 1, TOTAL_RINGS) : 0;
   const isPlaying = !!game && game.currentRing <= TOTAL_RINGS && !game.lost;
+
+  // ── Keyboard handlers ───────────────────────────────────────────────
+
+  const handleKey = useCallback((letter: string) => {
+    if (!isPlaying || !game) return;
+    const maxLen = game.currentRing + 3; // ring 1→4 letters, ring 4→7 letters
+    setInputError('');
+    setInput(prev => prev.length < maxLen ? prev + letter.toUpperCase() : prev);
+  }, [isPlaying, game]);
+
+  const handleDelete = useCallback(() => {
+    if (!isPlaying) return;
+    setInput(prev => prev.slice(0, -1));
+    setInputError('');
+  }, [isPlaying]);
 
   // ── Submit ───────────────────────────────────────────────────────────
 
@@ -319,8 +332,7 @@ export default function BloomScreen() {
   const seed = game.puzzle.seed.toLowerCase();
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: Colors.bg }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <View style={{ flex: 1, backgroundColor: Colors.bg }}>
       <Stack.Screen options={{
         title: 'BLOOM',
         headerStyle: { backgroundColor: Colors.bg },
@@ -394,28 +406,12 @@ export default function BloomScreen() {
               </Text>
             )}
 
-            {/* Error */}
-            {inputError ? <Text style={styles.errorText}>{inputError}</Text> : null}
-
-            {/* Input row */}
-            <Animated.View style={[styles.inputRow, { transform: [{ translateX: shakeAnim }] }]}>
-              <TextInput
-                ref={inputRef}
-                style={styles.input}
-                value={input}
-                onChangeText={t => { setInput(t); setInputError(''); }}
-                onSubmitEditing={submitWord}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                placeholder={`${currentWord().toUpperCase()} + 1 letter…`}
-                placeholderTextColor={Colors.textMuted}
-                returnKeyType="done"
-                maxLength={currentWord().length + 1}
-              />
-              <TouchableOpacity style={styles.btnEnter} onPress={submitWord}>
-                <Text style={styles.btnEnterText}>ENTER</Text>
-              </TouchableOpacity>
-            </Animated.View>
+            {/* Error — shakes the button row */}
+            {inputError ? (
+              <Animated.Text style={[styles.errorText, { transform: [{ translateX: shakeAnim }] }]}>
+                {inputError}
+              </Animated.Text>
+            ) : null}
 
             {/* Hint button */}
             {game.hintsUsed < MAX_HINTS ? (
@@ -541,6 +537,15 @@ export default function BloomScreen() {
 
       </ScrollView>
 
+      {/* Custom keyboard — always visible while playing */}
+      {isPlaying && (
+        <BloomKeyboard
+          onKey={handleKey}
+          onEnter={submitWord}
+          onDelete={handleDelete}
+        />
+      )}
+
       {/* Seed picker modal */}
       {seedModal && (
         <View style={styles.modalOverlay}>
@@ -636,7 +641,7 @@ export default function BloomScreen() {
           </View>
         </View>
       )}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -717,44 +722,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
-  inputRow: {
-    flexDirection: 'row',
-    gap: Spacing.xs,
-    width: '100%',
-    maxWidth: 360,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: Colors.tileBg,
-    borderRadius: Radius.md,
+  btnHint: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
-    color: Colors.darkGreen,
-    fontSize: Fonts.size.lg,
-    fontFamily: Fonts.mono,
     borderWidth: 2,
     borderColor: Colors.tileBorder,
-  },
-  btnEnter: {
-    backgroundColor: Colors.darkGreen,
     borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  btnEnterText: {
-    color: Colors.bg,
-    fontWeight: '700',
-    fontSize: Fonts.size.sm,
-    letterSpacing: 1.5,
-  },
-  btnHint: {
-    marginTop: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.xs,
-    borderWidth: 2,
-    borderColor: Colors.tileBorder,
-    borderRadius: Radius.md,
   },
   btnHintText: {
     color: Colors.textMuted,
