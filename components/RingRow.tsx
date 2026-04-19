@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.mono,
     fontSize: Fonts.size.xs,
     textAlign: 'right',
-    marginRight: Spacing.sm,
+    marginRight: 8,
     fontStyle: 'italic',
     letterSpacing: 0.5,
   },
