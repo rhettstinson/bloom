@@ -488,28 +488,21 @@ export default function BloomScreen() {
         ) : (
           /* ── Loss screen ──────────────────────────────────────────────── */
           (() => {
-            const deadWord = game.words[game.words.length - 1] ?? '';
-            const correctWords = game.words.slice(0, -1);
-            const parentWord = correctWords.length > 0
-              ? correctWords[correctWords.length - 1]
-              : game.puzzle.seed;
-            const suggested = findPathToBloom(parentWord, game.puzzle.graph) ?? [];
-            const allCorrect = [game.puzzle.seed.toLowerCase(), ...correctWords];
+            // All words the player correctly submitted
+            const completed = [game.puzzle.seed.toLowerCase(), ...game.words];
+            const lastWord = completed[completed.length - 1];
+            // Valid path from where they stopped
+            const remaining = findPathToBloom(lastWord, game.puzzle.graph) ?? [];
 
             return (
               <View style={styles.lossBox}>
-                <Text style={styles.lossTitle}>Dead End 🥀</Text>
-                <Text style={styles.lossSub}>
-                  {game.misses >= MAX_MISSES
-                    ? `You used all ${MAX_MISSES} attempts.`
-                    : `"${deadWord.toUpperCase()}" leads nowhere.`}
-                  {'\n'}Streak reset.
-                </Text>
+                <Text style={styles.lossTitle}>Out of Attempts 🥀</Text>
+                <Text style={styles.lossSub}>Streak reset.</Text>
 
-                {/* Player's path up to dead end */}
                 <View style={styles.chain}>
-                  {allCorrect.map((w, i) => {
-                    const prev = i === 0 ? '' : allCorrect[i - 1];
+                  {/* Player's correct progress */}
+                  {completed.map((w, i) => {
+                    const prev = i === 0 ? '' : completed[i - 1];
                     const newLetter = i === 0 ? '' : findNewLetter(prev, w);
                     return (
                       <View key={`c${i}`} style={styles.chainRow}>
@@ -519,31 +512,19 @@ export default function BloomScreen() {
                       </View>
                     );
                   })}
-                  {/* Dead-end word */}
-                  <View style={styles.chainRow}>
-                    <Text style={styles.chainEmoji}>🥀</Text>
-                    <Text style={[styles.chainWord, styles.chainWordDead]}>
-                      {deadWord.toUpperCase()}
-                    </Text>
-                    <Text style={[styles.chainNew, styles.chainNewDead]}>
-                      +{findNewLetter(parentWord, deadWord).toUpperCase()}
-                    </Text>
-                  </View>
 
-                  {/* Suggested continuation */}
-                  {suggested.length > 0 && (
+                  {/* Remaining valid path */}
+                  {remaining.length > 0 && (
                     <>
                       <View style={styles.lossDivider}>
                         <Text style={styles.lossDividerText}>one valid path</Text>
                       </View>
-                      {suggested.map((w, i) => {
-                        const prev = i === 0 ? parentWord : suggested[i - 1];
+                      {remaining.map((w, i) => {
+                        const prev = i === 0 ? lastWord : remaining[i - 1];
                         const newLetter = findNewLetter(prev, w);
                         return (
                           <View key={`s${i}`} style={styles.chainRow}>
-                            <Text style={styles.chainEmoji}>
-                              {w.length === 7 ? '🌸' : '💡'}
-                            </Text>
+                            <Text style={styles.chainEmoji}>{w.length === 7 ? '🌸' : '💡'}</Text>
                             <Text style={[styles.chainWord, styles.chainWordSuggest]}>
                               {w.toUpperCase()}
                             </Text>
@@ -922,14 +903,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: Radius.full,
-  },
-  chainWordDead: {
-    color: '#c0392b',
-    textDecorationLine: 'line-through',
-  },
-  chainNewDead: {
-    color: '#c0392b',
-    backgroundColor: '#fde8e8',
   },
   chainWordSuggest: {
     color: Colors.textMuted,
