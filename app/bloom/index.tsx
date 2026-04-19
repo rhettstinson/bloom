@@ -334,19 +334,24 @@ export default function BloomScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: Colors.bg }}>
       <Stack.Screen options={{
-        title: 'BLOOM',
         headerStyle: { backgroundColor: Colors.bg },
         headerTintColor: Colors.darkGreen,
         headerShadowVisible: false,
-        headerLeft: () => (
-          <TouchableOpacity onPress={openGarden} style={{ paddingHorizontal: 12 }}>
-            <Text style={{ fontSize: 20 }}>🌱</Text>
-          </TouchableOpacity>
+        headerBackTitleVisible: false,
+        headerTitle: () => (
+          <Text style={{ color: Colors.darkGreen, fontFamily: Fonts.mono, fontSize: Fonts.size.xl, fontWeight: '700', letterSpacing: 2 }}>
+            bloom
+          </Text>
         ),
         headerRight: () => (
-          <TouchableOpacity onPress={() => { setSeedModal(true); devSeedRef.current = ''; }} style={{ paddingHorizontal: 12 }}>
-            <Text style={{ color: Colors.darkGreen, fontWeight: '700', fontSize: Fonts.size.sm, letterSpacing: 1.5 }}>NEW</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <TouchableOpacity onPress={openGarden} style={{ paddingHorizontal: 10 }}>
+              <Text style={{ fontSize: 20 }}>🌱</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setSeedModal(true); devSeedRef.current = ''; }} style={{ paddingHorizontal: 10 }}>
+              <Text style={{ color: Colors.darkGreen, fontWeight: '700', fontSize: Fonts.size.sm, letterSpacing: 1.5 }}>NEW</Text>
+            </TouchableOpacity>
+          </View>
         ),
       }} />
 
@@ -356,13 +361,6 @@ export default function BloomScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Streak badge */}
-        {streak > 0 && (
-          <View style={styles.streakBadge}>
-            <Text style={styles.streakText}>🔥 {streak} day streak</Text>
-          </View>
-        )}
-
         {/* Main game area: flower + rings */}
         <View style={styles.gameArea}>
           <FlowerGrowth ringsComplete={ringsComplete} />
@@ -662,23 +660,6 @@ const styles = StyleSheet.create({
   content: {
     paddingVertical: Spacing.lg,
     alignItems: 'center',
-  },
-
-  // Streak badge
-  streakBadge: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 5,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.goldPale,
-    borderWidth: 1,
-    borderColor: Colors.gold,
-    marginBottom: Spacing.md,
-  },
-  streakText: {
-    color: Colors.darkGreen,
-    fontSize: Fonts.size.sm,
-    fontWeight: '700',
-    letterSpacing: 0.5,
   },
 
   // Game area: flower + rings side-by-side

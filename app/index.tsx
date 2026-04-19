@@ -3,7 +3,7 @@
  */
 
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { Colors, Fonts, Spacing, Radius } from '../constants/theme';
 
 const GAMES = [
@@ -21,6 +21,7 @@ export default function HomeScreen() {
   const router = useRouter();
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
       <Text style={styles.title}>🌱 Game Suite</Text>
       <Text style={styles.sub}>Daily word puzzles</Text>
       <View style={styles.grid}>

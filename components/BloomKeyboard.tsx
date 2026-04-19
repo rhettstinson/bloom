@@ -17,6 +17,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Fonts, Radius } from '../constants/theme';
 
 const ROW1 = ['Q','W','E','R','T','Y','U','I','O','P'] as const;
@@ -31,13 +32,14 @@ interface BloomKeyboardProps {
 
 export default function BloomKeyboard({ onKey, onEnter, onDelete }: BloomKeyboardProps) {
   const { width } = useWindowDimensions();
+  const { bottom: safeBottom } = useSafeAreaInsets();
 
   // Key width: fit 10 keys + 9 gaps in screen width with small horizontal padding
   const keyW = Math.floor((width - 24) / 10) - 4;
   const keyH = Math.round(keyW * 1.45);
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, { paddingBottom: Math.max(8, safeBottom) }]}>
       {/* Row 1 */}
       <View style={styles.row}>
         {ROW1.map(k => (
