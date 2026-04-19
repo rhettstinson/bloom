@@ -398,7 +398,7 @@ export default function BloomScreen() {
                 <RingRow
                   key={ring}
                   ringIndex={ring}
-                  word={ring < game.currentRing ? game.words[ring - 1] : ''}
+                  word={ring < game.currentRing ? game.words[ring - 1] ?? '' : ''}
                   typingInput={ring === game.currentRing ? input : ''}
                   status={status}
                   tileSize={tileSize}

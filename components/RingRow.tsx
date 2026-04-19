@@ -35,7 +35,7 @@ export default function RingRow({
 }: RingRowProps) {
   const tileCount = ringIndex + 3;  // 3 for seed, 4 for ring1 … 7 for ring4
   const displayWord = status === 'active' ? typingInput : word;
-  const letters = displayWord.toUpperCase().split('');
+  const letters = (displayWord ?? '').toUpperCase().split('');
 
   return (
     <View style={[styles.row, status === 'future' && styles.rowFuture]}>
