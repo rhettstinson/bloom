@@ -14,6 +14,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -168,6 +169,12 @@ export default function BloomScreen() {
     setGardenModal(true);
   }, []);
 
+  // ── Responsive tile size ─────────────────────────────────────────────
+  // Fit ring 4 (7 tiles) exactly within the available horizontal space:
+  //   screen - padding(8×2) - flower(90) - gap(8) - tile-gaps(6×4)
+  const { width: screenWidth } = useWindowDimensions();
+  const tileSize = Math.max(28, Math.floor((screenWidth - 16 - 90 - 8 - 24) / 7));
+
   // ── Derived state ────────────────────────────────────────────────────
 
   const currentWord = (): string => {
@@ -311,10 +318,6 @@ export default function BloomScreen() {
 
   const seed = game.puzzle.seed.toLowerCase();
 
-  // Ring rows: displayed bottom→top so we reverse for flex-column
-  // We render ring4 first (top), seed last (bottom)
-  const ringLabels = ['4 letters', '5 letters', '6 letters', '7 letters'];
-
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: Colors.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -348,7 +351,7 @@ export default function BloomScreen() {
           </View>
         )}
 
-        {/* Main game area: stem + rings */}
+        {/* Main game area: flower + rings */}
         <View style={styles.gameArea}>
           <FlowerGrowth ringsComplete={ringsComplete} />
 
@@ -366,8 +369,7 @@ export default function BloomScreen() {
                   word={ring < game.currentRing ? game.words[ring - 1] : ''}
                   typingInput={ring === game.currentRing ? input : ''}
                   status={status}
-                  tileSize={42}
-                  label={ringLabels[ring - 1]}
+                  tileSize={tileSize}
                 />
               );
             })}
@@ -377,8 +379,7 @@ export default function BloomScreen() {
               ringIndex={0}
               word={seed}
               status="seed"
-              tileSize={42}
-              label="seed"
+              tileSize={tileSize}
             />
           </View>
         </View>
@@ -675,15 +676,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // Game area: stem + rings side-by-side
+  // Game area: flower + rings side-by-side
   gameArea: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    justifyContent: 'center',
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.lg,
+    gap: 8,
+    paddingHorizontal: 8,
+    width: '100%',
   },
   rings: {
+    flex: 1,
     flexDirection: 'column',
     alignItems: 'flex-end',
   },

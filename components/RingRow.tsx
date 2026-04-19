@@ -12,7 +12,7 @@
 import React from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 import Tile, { TileState } from './Tile';
-import { Colors, Fonts, Spacing } from '../constants/theme';
+import { Colors, Fonts } from '../constants/theme';
 
 type RowStatus = 'future' | 'active' | 'bloomed' | 'seed';
 
@@ -43,9 +43,7 @@ export default function RingRow({
         <Text style={[styles.label, status === 'future' && styles.labelMuted]}>
           {label}
         </Text>
-      ) : (
-        <View style={styles.labelPlaceholder} />
-      )}
+      ) : null}
 
       <View style={styles.tiles}>
         {Array.from({ length: tileCount }).map((_, i) => {
@@ -98,11 +96,8 @@ const styles = StyleSheet.create({
   labelMuted: {
     color: Colors.tileBorder,
   },
-  labelPlaceholder: {
-    width: 58 + Spacing.sm,
-  },
   tiles: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 4,
   },
 });
