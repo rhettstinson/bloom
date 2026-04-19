@@ -419,6 +419,7 @@ export default function BloomScreen() {
         {/* Miss indicator — always visible while a game is loaded */}
         {game && (
           <View style={styles.missRow}>
+            <Text style={styles.missLabel}>attempts</Text>
             {Array.from({ length: MAX_MISSES }).map((_, i) => (
               <View key={i} style={[styles.missDot, i < game.misses && styles.missDotUsed]} />
             ))}
@@ -428,11 +429,6 @@ export default function BloomScreen() {
         {/* Input area */}
         {isPlaying ? (
           <View style={styles.inputArea}>
-            {/* Word prompt */}
-            <Text style={styles.wordPrompt}>
-              {currentWord().toUpperCase()} + one letter
-            </Text>
-
             {/* Hint display */}
             {game.revealedLetters.length > 0 && (
               <Text style={styles.hintText}>
@@ -573,13 +569,20 @@ export default function BloomScreen() {
 
       </ScrollView>
 
-      {/* Custom keyboard — always visible while playing */}
+      {/* Word prompt + keyboard — pinned above home indicator */}
       {isPlaying && (
-        <BloomKeyboard
-          onKey={handleKey}
-          onEnter={submitWord}
-          onDelete={handleDelete}
-        />
+        <>
+          <View style={styles.wordPromptBar}>
+            <Text style={styles.wordPrompt}>
+              {currentWord().toUpperCase()} + one letter
+            </Text>
+          </View>
+          <BloomKeyboard
+            onKey={handleKey}
+            onEnter={submitWord}
+            onDelete={handleDelete}
+          />
+        </>
       )}
 
       {/* Seed picker modal */}
@@ -760,22 +763,30 @@ const styles = StyleSheet.create({
   // Miss indicator
   missRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
     justifyContent: 'center',
+    alignItems: 'center',
     marginTop: Spacing.md,
     marginBottom: 2,
   },
+  missLabel: {
+    color: Colors.textMuted,
+    fontFamily: Fonts.mono,
+    fontSize: Fonts.size.xs,
+    letterSpacing: 1,
+    marginRight: 4,
+  },
   missDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     borderWidth: 2,
     borderColor: Colors.tileBorder,
     backgroundColor: 'transparent',
   },
   missDotUsed: {
-    backgroundColor: Colors.error,
-    borderColor: Colors.error,
+    backgroundColor: Colors.pinkDark,
+    borderColor: Colors.pinkDark,
   },
 
   // Game area: flower + rings side-by-side
@@ -794,17 +805,25 @@ const styles = StyleSheet.create({
 
   // Input
   inputArea: {
-    marginTop: Spacing.sm,
+    marginTop: Spacing.md,
     alignItems: 'center',
     width: '100%',
     paddingHorizontal: Spacing.lg,
   },
+  wordPromptBar: {
+    width: '100%',
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+    backgroundColor: Colors.bg,
+    borderTopWidth: 1,
+    borderTopColor: Colors.tileBorder,
+  },
   wordPrompt: {
-    color: Colors.textMuted,
+    color: Colors.darkGreen,
     fontFamily: Fonts.mono,
-    fontSize: Fonts.size.sm,
-    letterSpacing: 1.5,
-    marginBottom: Spacing.xs,
+    fontSize: Fonts.size.lg,
+    letterSpacing: 2,
+    fontWeight: '600',
   },
   hintText: {
     color: Colors.gold,
