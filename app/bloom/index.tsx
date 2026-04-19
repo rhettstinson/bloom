@@ -419,7 +419,7 @@ export default function BloomScreen() {
         {/* Miss indicator — always visible while a game is loaded */}
         {game && (
           <View style={styles.missRow}>
-            <Text style={styles.missLabel}>attempts</Text>
+            <Text style={styles.missLabel}>Attempts</Text>
             {Array.from({ length: MAX_MISSES }).map((_, i) => (
               <View key={i} style={[styles.missDot, i < game.misses && styles.missDotUsed]} />
             ))}
@@ -574,7 +574,7 @@ export default function BloomScreen() {
         <>
           <View style={styles.wordPromptBar}>
             <Text style={styles.wordPrompt}>
-              {currentWord().toUpperCase()} + one letter
+              {currentWord().toUpperCase()} + 1 letter
             </Text>
           </View>
           <BloomKeyboard
@@ -772,14 +772,14 @@ const styles = StyleSheet.create({
   missLabel: {
     color: Colors.textMuted,
     fontFamily: Fonts.mono,
-    fontSize: Fonts.size.xs,
+    fontSize: Fonts.size.sm,
     letterSpacing: 1,
     marginRight: 4,
   },
   missDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     borderWidth: 2,
     borderColor: Colors.tileBorder,
     backgroundColor: 'transparent',
@@ -812,14 +812,13 @@ const styles = StyleSheet.create({
   },
   wordPromptBar: {
     width: '100%',
-    paddingVertical: Spacing.sm,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.md,
     alignItems: 'center',
     backgroundColor: Colors.bg,
-    borderTopWidth: 1,
-    borderTopColor: Colors.tileBorder,
   },
   wordPrompt: {
-    color: Colors.darkGreen,
+    color: Colors.textMuted,
     fontFamily: Fonts.mono,
     fontSize: Fonts.size.lg,
     letterSpacing: 2,
