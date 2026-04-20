@@ -402,6 +402,7 @@ export default function BloomScreen() {
                   typingInput={ring === game.currentRing ? input : ''}
                   status={status}
                   tileSize={tileSize}
+                  hintLetters={ring === game.currentRing ? game.revealedLetters : []}
                 />
               );
             })}
@@ -429,13 +430,6 @@ export default function BloomScreen() {
         {/* Input area */}
         {isPlaying ? (
           <View style={styles.inputArea}>
-            {/* Hint display */}
-            {game.revealedLetters.length > 0 && (
-              <Text style={styles.hintText}>
-                hint: contains {game.revealedLetters.map(l => `"${l}"`).join(', ')}
-              </Text>
-            )}
-
             {/* Error — shakes with the error message */}
             {inputError ? (
               <Animated.Text style={[styles.errorText, { transform: [{ translateX: shakeAnim }] }]}>
@@ -804,13 +798,6 @@ const styles = StyleSheet.create({
     fontSize: Fonts.size.lg,
     letterSpacing: 2,
     fontWeight: '600',
-  },
-  hintText: {
-    color: Colors.gold,
-    fontSize: Fonts.size.sm,
-    letterSpacing: 0.5,
-    marginBottom: Spacing.xs,
-    fontStyle: 'italic',
   },
   errorText: {
     color: Colors.error,

@@ -20,7 +20,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Colors, Fonts, Radius } from '../constants/theme';
 
-export type TileState = 'empty' | 'active' | 'typing' | 'bloomed' | 'seed';
+export type TileState = 'empty' | 'active' | 'typing' | 'bloomed' | 'seed' | 'hint';
 
 interface TileProps {
   letter?: string;
@@ -35,6 +35,7 @@ const BG: Record<TileState, string> = {
   typing:  Colors.tileActive,
   bloomed: Colors.tileBloomed,
   seed:    Colors.tileSeed,
+  hint:    Colors.gold,
 };
 
 const BORDER: Record<TileState, string> = {
@@ -43,6 +44,7 @@ const BORDER: Record<TileState, string> = {
   typing:  Colors.tileActiveBorder,
   bloomed: Colors.tileBloomedBorder,
   seed:    Colors.tileSeedBorder,
+  hint:    Colors.gold,
 };
 
 const TEXT: Record<TileState, string> = {
@@ -51,6 +53,7 @@ const TEXT: Record<TileState, string> = {
   typing:  Colors.darkGreen,
   bloomed: '#ffffff',
   seed:    '#faf8f2',
+  hint:    '#ffffff',
 };
 
 export default function Tile({ letter = '', state = 'empty', size = 44, delay = 0 }: TileProps) {

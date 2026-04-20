@@ -23,6 +23,7 @@ interface RingRowProps {
   status: RowStatus;
   tileSize?: number;
   label?: string;         // e.g. "7 letters"
+  hintLetters?: string[]; // revealed hint letters for this ring
 }
 
 export default function RingRow({
@@ -32,6 +33,7 @@ export default function RingRow({
   status,
   tileSize = 44,
   label,
+  hintLetters = [],
 }: RingRowProps) {
   const tileCount = ringIndex + 3;  // 3 for seed, 4 for ring1 … 7 for ring4
   const displayWord = status === 'active' ? typingInput : word;
@@ -69,6 +71,21 @@ export default function RingRow({
             />
           );
         })}
+
+        {/* Hint tiles — shown beside the active row when hints have been used */}
+        {hintLetters.length > 0 && (
+          <>
+            <View style={styles.hintSeparator} />
+            {hintLetters.map((letter, i) => (
+              <Tile
+                key={`hint-${i}`}
+                letter={letter}
+                state="hint"
+                size={tileSize}
+              />
+            ))}
+          </>
+        )}
       </View>
     </View>
   );
@@ -99,5 +116,11 @@ const styles = StyleSheet.create({
   tiles: {
     flexDirection: 'row',
     gap: 4,
+  },
+  hintSeparator: {
+    width: 1,
+    marginHorizontal: 4,
+    backgroundColor: Colors.tileBorder,
+    alignSelf: 'stretch',
   },
 });
