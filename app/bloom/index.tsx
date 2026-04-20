@@ -615,35 +615,34 @@ export default function BloomScreen() {
                   ))}
                 </View>
 
-                {/* Miss distribution */}
-                {gardenStats.won > 0 && (
-                  <View style={styles.gardenDist}>
-                    <Text style={styles.gardenDistTitle}>Misses per win</Text>
-                    {Array.from({ length: MAX_MISSES }, (_, i) => i)
-                      .filter(i => (gardenStats.missDistribution?.[i] ?? 0) > 0)
-                      .map(i => {
-                        const count = gardenStats.missDistribution?.[i] ?? 0;
-                        const isPerfect = i === 0;
-                        return (
-                          <View key={i} style={styles.gardenDistRow}>
-                            <Text style={[styles.gardenDistLabel, isPerfect && styles.gardenDistLabelBest]}>
-                              {i === 0 ? 'Perfect' : `${i} miss${i > 1 ? 'es' : ''}`}
-                            </Text>
-                            <View style={styles.gardenDistBar}>
-                              <View style={[
-                                styles.gardenDistFill,
-                                isPerfect && styles.gardenDistFillBest,
-                                { flex: count / gardenStats.won },
-                              ]} />
-                            </View>
-                            <Text style={[styles.gardenDistCount, isPerfect && styles.gardenDistLabelBest]}>
-                              {count}{isPerfect ? ' ⭐' : ''}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                  </View>
-                )}
+                {/* Miss distribution — always show all rows */}
+                <View style={styles.gardenDist}>
+                  <Text style={styles.gardenDistTitle}>Misses per win</Text>
+                  {Array.from({ length: MAX_MISSES }, (_, i) => i).map(i => {
+                    const count = gardenStats.missDistribution?.[i] ?? 0;
+                    const isPerfect = i === 0;
+                    const fillRatio = gardenStats.won > 0 ? count / gardenStats.won : 0;
+                    return (
+                      <View key={i} style={styles.gardenDistRow}>
+                        <Text style={[styles.gardenDistLabel, isPerfect && styles.gardenDistLabelBest]}>
+                          {i === 0 ? 'Perfect' : `${i} miss${i > 1 ? 'es' : ''}`}
+                        </Text>
+                        <View style={styles.gardenDistBar}>
+                          {fillRatio > 0 && (
+                            <View style={[
+                              styles.gardenDistFill,
+                              isPerfect && styles.gardenDistFillBest,
+                              { flex: fillRatio },
+                            ]} />
+                          )}
+                        </View>
+                        <Text style={[styles.gardenDistCount, isPerfect && styles.gardenDistLabelBest]}>
+                          {count > 0 ? `${count}${isPerfect ? ' ⭐' : ''}` : '—'}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
               </>
             ) : (
               <Text style={styles.gardenEmpty}>
@@ -1093,8 +1092,10 @@ const styles = StyleSheet.create({
   gardenDistBar: {
     flex: 1,
     height: 16,
-    backgroundColor: Colors.surface,
+    backgroundColor: 'transparent',
     borderRadius: Radius.sm,
+    borderWidth: 1.5,
+    borderColor: Colors.tileBorder,
     overflow: 'hidden',
     flexDirection: 'row',
   },
