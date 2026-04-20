@@ -233,7 +233,7 @@ export default function BloomScreen() {
           done: true,
           won: false,
         });
-        recordResult(game.puzzle.dayIndex, false, game.hintsUsed)
+        recordResult(game.puzzle.dayIndex, false, game.hintsUsed, newMisses)
           .then(s => setStreak(s.streak));
       } else {
         setGame({ ...game, misses: newMisses });
@@ -301,7 +301,7 @@ export default function BloomScreen() {
     });
 
     if (won) {
-      recordResult(game.puzzle.dayIndex, true, game.hintsUsed)
+      recordResult(game.puzzle.dayIndex, true, game.hintsUsed, game.misses)
         .then(s => setStreak(s.streak));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
@@ -615,28 +615,33 @@ export default function BloomScreen() {
                   ))}
                 </View>
 
-                {/* Hint distribution */}
-                {Object.keys(gardenStats.distribution).length > 0 && (
+                {/* Miss distribution */}
+                {gardenStats.won > 0 && (
                   <View style={styles.gardenDist}>
-                    <Text style={styles.gardenDistTitle}>Hint history</Text>
-                    {Array.from({ length: MAX_HINTS + 1 }, (_, i) => i)
-                      .filter(i => (gardenStats.distribution[i] ?? 0) > 0)
-                      .map(i => (
-                        <View key={i} style={styles.gardenDistRow}>
-                          <Text style={styles.gardenDistLabel}>
-                            {i === 0 ? 'No hints' : `${i} hint${i > 1 ? 's' : ''}`}
-                          </Text>
-                          <View style={styles.gardenDistBar}>
-                            <View style={[
-                              styles.gardenDistFill,
-                              { flex: gardenStats.distribution[i] / gardenStats.won },
-                            ]} />
+                    <Text style={styles.gardenDistTitle}>Misses per win</Text>
+                    {Array.from({ length: MAX_MISSES }, (_, i) => i)
+                      .filter(i => (gardenStats.missDistribution?.[i] ?? 0) > 0)
+                      .map(i => {
+                        const count = gardenStats.missDistribution?.[i] ?? 0;
+                        const isPerfect = i === 0;
+                        return (
+                          <View key={i} style={styles.gardenDistRow}>
+                            <Text style={[styles.gardenDistLabel, isPerfect && styles.gardenDistLabelBest]}>
+                              {i === 0 ? 'Perfect' : `${i} miss${i > 1 ? 'es' : ''}`}
+                            </Text>
+                            <View style={styles.gardenDistBar}>
+                              <View style={[
+                                styles.gardenDistFill,
+                                isPerfect && styles.gardenDistFillBest,
+                                { flex: count / gardenStats.won },
+                              ]} />
+                            </View>
+                            <Text style={[styles.gardenDistCount, isPerfect && styles.gardenDistLabelBest]}>
+                              {count}{isPerfect ? ' ⭐' : ''}
+                            </Text>
                           </View>
-                          <Text style={styles.gardenDistCount}>
-                            {gardenStats.distribution[i]}{i === 0 ? ' 🌟' : ''}
-                          </Text>
-                        </View>
-                      ))}
+                        );
+                      })}
                   </View>
                 )}
               </>
@@ -1096,6 +1101,13 @@ const styles = StyleSheet.create({
   gardenDistFill: {
     backgroundColor: Colors.midGreen,
     borderRadius: Radius.sm,
+  },
+  gardenDistFillBest: {
+    backgroundColor: Colors.gold,
+  },
+  gardenDistLabelBest: {
+    color: Colors.darkGreen,
+    fontWeight: '700',
   },
   gardenDistCount: {
     color: Colors.textMuted,

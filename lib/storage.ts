@@ -11,8 +11,9 @@ export interface Stats {
   won: number;
   streak: number;
   maxStreak: number;
-  lastWonDay: number;    // dayIndex of last win
-  distribution: Record<number, number>; // hintsUsed → count
+  lastWonDay: number;          // dayIndex of last win
+  distribution: Record<number, number>;     // hintsUsed → win count (legacy)
+  missDistribution: Record<number, number>; // misses → win count (0 = best)
 }
 
 export interface DayProgress {
@@ -37,6 +38,7 @@ const DEFAULT_STATS: Stats = {
   maxStreak: 0,
   lastWonDay: -1,
   distribution: {},
+  missDistribution: {},
 };
 
 export async function loadStats(): Promise<Stats> {
@@ -56,7 +58,8 @@ export async function saveStats(stats: Stats): Promise<void> {
 export async function recordResult(
   dayIndex: number,
   won: boolean,
-  hintsUsed: number
+  hintsUsed: number,
+  misses: number = 0,
 ): Promise<Stats> {
   const stats = await loadStats();
   stats.played += 1;
@@ -67,6 +70,7 @@ export async function recordResult(
     stats.maxStreak = Math.max(stats.maxStreak, stats.streak);
     stats.lastWonDay = dayIndex;
     stats.distribution[hintsUsed] = (stats.distribution[hintsUsed] ?? 0) + 1;
+    stats.missDistribution[misses] = (stats.missDistribution[misses] ?? 0) + 1;
   } else {
     stats.streak = 0;
   }
