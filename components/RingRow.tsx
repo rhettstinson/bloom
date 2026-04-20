@@ -48,6 +48,21 @@ export default function RingRow({
       ) : null}
 
       <View style={styles.tiles}>
+        {/* Hint tiles — shown to the LEFT of the word tiles */}
+        {hintLetters.length > 0 && (
+          <>
+            {hintLetters.map((letter, i) => (
+              <Tile
+                key={`hint-${i}`}
+                letter={letter}
+                state="hint"
+                size={tileSize}
+              />
+            ))}
+            <View style={styles.hintSeparator} />
+          </>
+        )}
+
         {Array.from({ length: tileCount }).map((_, i) => {
           const letter = letters[i] ?? '';
           let tileState: TileState = 'empty';
@@ -71,21 +86,6 @@ export default function RingRow({
             />
           );
         })}
-
-        {/* Hint tiles — shown beside the active row when hints have been used */}
-        {hintLetters.length > 0 && (
-          <>
-            <View style={styles.hintSeparator} />
-            {hintLetters.map((letter, i) => (
-              <Tile
-                key={`hint-${i}`}
-                letter={letter}
-                state="hint"
-                size={tileSize}
-              />
-            ))}
-          </>
-        )}
       </View>
     </View>
   );
