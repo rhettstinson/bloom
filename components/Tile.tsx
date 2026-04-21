@@ -18,7 +18,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withDelay,
-  withSpring,
+  withSequence,
 } from 'react-native-reanimated';
 import { Colors, Fonts } from '../constants/theme';
 
@@ -71,9 +71,10 @@ export default function Tile({ letter = '', state = 'empty', size = 44, delay = 
     prevLetterRef.current = letter;
     if (letter && wasEmpty && (state === 'typing' || state === 'active')) {
       cancelAnimation(scale);
-      scale.value = withSpring(1.08, { damping: 6, stiffness: 300 }, () => {
-        scale.value = withTiming(1, { duration: 100 });
-      });
+      scale.value = withSequence(
+        withTiming(1.08, { duration: 80 }),
+        withTiming(1,    { duration: 100 }),
+      );
     }
   }, [letter, state]);
 
@@ -82,9 +83,10 @@ export default function Tile({ letter = '', state = 'empty', size = 44, delay = 
     if (state === 'bloomed' && !hasBloomedRef.current) {
       hasBloomedRef.current = true;
       cancelAnimation(scale);
-      scale.value = withDelay(delay, withSpring(1.12, { damping: 5, stiffness: 200 }, () => {
-        scale.value = withTiming(1, { duration: 150 });
-      }));
+      scale.value = withDelay(delay, withSequence(
+        withTiming(1.12, { duration: 120 }),
+        withTiming(1,    { duration: 200 }),
+      ));
     }
   }, [state]); // intentionally excludes delay — use the value captured at first bloom
 
