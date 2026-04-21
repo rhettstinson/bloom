@@ -21,7 +21,7 @@ export default function HomeScreen() {
   const router = useRouter();
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen options={{ headerShown: false, title: '' }} />
       <Text style={styles.title}>🌱 Game Suite</Text>
       <Text style={styles.sub}>Daily word puzzles</Text>
       <View style={styles.grid}>

@@ -14,7 +14,7 @@ import { StyleSheet, View, Text } from 'react-native';
 import Tile, { TileState } from './Tile';
 import { Colors, Fonts } from '../constants/theme';
 
-type RowStatus = 'future' | 'active' | 'bloomed' | 'seed';
+type RowStatus = 'future' | 'active' | 'bloomed' | 'seed' | 'revealed';
 
 interface RingRowProps {
   ringIndex: number;      // 0 = seed, 1–4 = rings
@@ -40,7 +40,7 @@ export default function RingRow({
   const letters = (displayWord ?? '').toUpperCase().split('');
 
   return (
-    <View style={[styles.row, status === 'future' && styles.rowFuture]}>
+    <View style={[styles.row, status === 'future' && styles.rowFuture, status === 'revealed' && styles.rowRevealed]}>
       {label ? (
         <Text style={[styles.label, status === 'future' && styles.labelMuted]}>
           {label}
@@ -71,6 +71,8 @@ export default function RingRow({
             tileState = 'seed';
           } else if (status === 'bloomed') {
             tileState = 'bloomed';
+          } else if (status === 'revealed') {
+            tileState = 'wilted';
           } else if (status === 'active') {
             tileState = letter ? 'typing' : 'active';
           }
@@ -99,6 +101,9 @@ const styles = StyleSheet.create({
   },
   rowFuture: {
     opacity: 0.35,
+  },
+  rowRevealed: {
+    opacity: 0.75,
   },
   label: {
     width: 58,

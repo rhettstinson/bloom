@@ -22,7 +22,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Colors, Fonts } from '../constants/theme';
 
-export type TileState = 'empty' | 'active' | 'typing' | 'bloomed' | 'seed' | 'hint';
+export type TileState = 'empty' | 'active' | 'typing' | 'bloomed' | 'seed' | 'hint' | 'wilted';
 
 interface TileProps {
   letter?: string;
@@ -38,6 +38,7 @@ const BG: Record<TileState, string> = {
   bloomed: Colors.tileBloomed,
   seed:    Colors.tileSeed,
   hint:    Colors.gold,
+  wilted:  '#dde8c8',  // sage pale — dried botanical, distinct from pink bloom
 };
 
 const BORDER: Record<TileState, string> = {
@@ -47,6 +48,7 @@ const BORDER: Record<TileState, string> = {
   bloomed: Colors.tileBloomedBorder,
   seed:    Colors.tileSeedBorder,
   hint:    Colors.gold,
+  wilted:  '#9ab878',
 };
 
 const TEXT: Record<TileState, string> = {
@@ -56,6 +58,7 @@ const TEXT: Record<TileState, string> = {
   bloomed: '#ffffff',
   seed:    '#faf8f2',
   hint:    '#ffffff',
+  wilted:  Colors.darkGreen,
 };
 
 export default function Tile({ letter = '', state = 'empty', size = 44, delay = 0 }: TileProps) {
@@ -78,9 +81,9 @@ export default function Tile({ letter = '', state = 'empty', size = 44, delay = 
     }
   }, [letter, state]);
 
-  // Bloom pop fires exactly once when state first transitions to 'bloomed'
+  // Bloom pop fires exactly once when state first transitions to 'bloomed' or 'wilted'
   useEffect(() => {
-    if (state === 'bloomed' && !hasBloomedRef.current) {
+    if ((state === 'bloomed' || state === 'wilted') && !hasBloomedRef.current) {
       hasBloomedRef.current = true;
       cancelAnimation(scale);
       scale.value = withDelay(delay, withSequence(

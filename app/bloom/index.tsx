@@ -2,10 +2,11 @@
  * BLOOM game screen — botanical design, graph-based validation
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   ActivityIndicator,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,13 +15,14 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import RingRow from '../../components/RingRow';
 import FlowerGrowth from '../../components/FlowerGrowth';
 import BloomKeyboard from '../../components/BloomKeyboard';
 import { fetchTodaysPuzzle, fetchPuzzleBySeed, type PuzzleResponse } from '../../lib/api';
-import { isValidMove, isAnagramPlusOne, findNewLetter, findPathToBloom, findPathToBloomViaLetter, type Graph } from '../../lib/gameLogic';
+import { isAnagramPlusOne, findPathToBloom, findPathToBloomViaLetter, findNewLetter, type Graph } from '../../lib/gameLogic';
 import { loadProgress, saveProgress, recordResult, loadStats, type Stats } from '../../lib/storage';
 import { Colors, Fonts, Spacing, Radius } from '../../constants/theme';
 
@@ -35,19 +37,14 @@ interface GameState {
   words: string[];           // completed ring words [ring1, ring2, ring3, ring4]
   currentRing: number;       // 1–4 while playing, 5 = done
   hintsUsed: number;
-  misses: number;            // invalid submissions used (0–MAX_MISSES)
-  revealedLetters: string[]; // letters revealed by hints for current ring
+  misses: number;
+  revealedLetters: string[]; // hint letters revealed for current ring
   won: boolean;
-  lost: boolean;             // true when misses === MAX_MISSES or dead-end submitted
+  lost: boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-/**
- * Pick a hint letter for the current ring.
- * Collects all unique new letters across every child of `currentWord`,
- * filters out already-revealed ones, picks a random unrevealed one.
- */
 function pickHintLetter(currentWord: string, graph: Graph, revealed: string[]): string | null {
   const children = graph[currentWord.toLowerCase()];
   if (!children || children.length === 0) return null;
@@ -76,6 +73,8 @@ export default function BloomScreen() {
   const [gardenStats, setGardenStats] = useState<Stats | null>(null);
   const [howToModal, setHowToModal] = useState(false);
   const [streak, setStreak]     = useState(0);
+  // Tracks how many solution rings have animated in after a loss
+  const [revealedSolutionCount, setRevealedSolutionCount] = useState(0);
   const devSeedRef              = useRef('');
   const shakeAnim               = useRef(new Animated.Value(0)).current;
 
@@ -85,8 +84,6 @@ export default function BloomScreen() {
     fetcher: () => Promise<PuzzleResponse>,
     fresh = false,
   ) => {
-    // Increment key first — forces complete remount of the game tree,
-    // resetting all Reanimated shared values in tiles/stem.
     setGameKey(k => k + 1);
     setGame(null);
     setLoading(true);
@@ -139,7 +136,6 @@ export default function BloomScreen() {
     ]).start();
   }, [shakeAnim]);
 
-  // Direct seed loader — bypasses loading-state complexity, always starts fresh
   const loadSeed = useCallback(async (seed: string) => {
     setSeedModal(false);
     devSeedRef.current = '';
@@ -163,7 +159,6 @@ export default function BloomScreen() {
     }
   }, []);
 
-  // Open the Your Garden stats modal
   const openGarden = useCallback(async () => {
     const s = await loadStats();
     setGardenStats(s);
@@ -171,8 +166,6 @@ export default function BloomScreen() {
   }, []);
 
   // ── Responsive tile size ─────────────────────────────────────────────
-  // Fit ring 4 (7 tiles) exactly within the available horizontal space:
-  //   screen - padding(8×2) - flower(90) - gap(8) - tile-gaps(6×4)
   const { width: screenWidth } = useWindowDimensions();
   const tileSize = Math.max(28, Math.floor((screenWidth - 16 - 90 - 8 - 24) / 7));
 
@@ -187,11 +180,38 @@ export default function BloomScreen() {
   const ringsComplete = game ? Math.min(game.currentRing - 1, TOTAL_RINGS) : 0;
   const isPlaying = !!game && game.currentRing <= TOTAL_RINGS && !game.lost;
 
+  // Solution path for loss screen — computed once when lost, stable until game changes
+  const solutionPath = useMemo(() => {
+    if (!game?.lost) return [];
+    const lastWord = game.words.length > 0
+      ? game.words[game.words.length - 1]
+      : game.puzzle.seed;
+    const hintLetter = game.revealedLetters[0];
+    return (hintLetter
+      ? findPathToBloomViaLetter(lastWord, hintLetter, game.puzzle.graph)
+      : findPathToBloom(lastWord, game.puzzle.graph)) ?? [];
+  }, [game?.lost, game?.words, game?.revealedLetters, game?.puzzle]);
+
+  // Reset solution animation counter when a new game starts
+  useEffect(() => {
+    setRevealedSolutionCount(0);
+  }, [gameKey]);
+
+  // Stagger-reveal solution rings after a loss (one ring every 700 ms)
+  useEffect(() => {
+    if (!game?.lost || revealedSolutionCount >= solutionPath.length) return;
+    const timer = setTimeout(
+      () => setRevealedSolutionCount(c => c + 1),
+      revealedSolutionCount === 0 ? 400 : 700, // slight initial pause
+    );
+    return () => clearTimeout(timer);
+  }, [game?.lost, revealedSolutionCount, solutionPath.length]);
+
   // ── Keyboard handlers ───────────────────────────────────────────────
 
   const handleKey = useCallback((letter: string) => {
     if (!isPlaying || !game) return;
-    const maxLen = game.currentRing + 3; // ring 1→4 letters, ring 4→7 letters
+    const maxLen = game.currentRing + 3;
     setInput(prev => prev.length < maxLen ? prev + letter.toUpperCase() : prev);
   }, [isPlaying, game]);
 
@@ -206,10 +226,8 @@ export default function BloomScreen() {
     if (!game || !isPlaying) return;
     const candidate = input.trim().toLowerCase();
     if (!candidate) return;
-    // Must fill every tile before submitting
     if (candidate.length < currentWord().length + 1) return;
 
-    // ── Unified miss handler ──────────────────────────────────────────
     const recordMiss = () => {
       const newMisses = game.misses + 1;
       setInput('');
@@ -217,7 +235,6 @@ export default function BloomScreen() {
       triggerShake();
 
       if (newMisses >= MAX_MISSES) {
-        // Out of lives — end game
         setGame({ ...game, misses: newMisses, currentRing: TOTAL_RINGS + 1, won: false, lost: true });
         saveProgress({
           dayIndex: game.puzzle.dayIndex,
@@ -244,44 +261,23 @@ export default function BloomScreen() {
       }
     };
 
-    // Error type 1: not a real word in the graph at all
-    if (!(candidate in game.puzzle.graph)) {
-      recordMiss();
-      return;
-    }
+    if (!(candidate in game.puzzle.graph)) { recordMiss(); return; }
+    if (!isAnagramPlusOne(currentWord(), candidate)) { recordMiss(); return; }
 
-    // Error type 2: valid word but violates the anagram+1 rule
-    if (!isAnagramPlusOne(currentWord(), candidate)) {
-      recordMiss();
-      return;
-    }
-
-    // Error type 3: valid word and valid rule, but dead end on non-final ring
     const isFinalRing = game.currentRing === TOTAL_RINGS;
     if (!isFinalRing) {
       const children = game.puzzle.graph[candidate];
-      if (!children || children.length === 0) {
-        recordMiss();
-        return;
-      }
+      if (!children || children.length === 0) { recordMiss(); return; }
     }
 
-    // ── Valid move — advance ring ─────────────────────────────────────
+    // ── Valid move ────────────────────────────────────────────────────
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     const newWords = [...game.words, candidate];
     const newRing  = game.currentRing + 1;
     const won      = newRing > TOTAL_RINGS;
 
-    const next: GameState = {
-      ...game,
-      words: newWords,
-      currentRing: newRing,
-      revealedLetters: [],
-      won,
-      lost: false,
-    };
-    setGame(next);
+    setGame({ ...game, words: newWords, currentRing: newRing, revealedLetters: [], won, lost: false });
     setInput('');
 
     saveProgress({
@@ -306,15 +302,11 @@ export default function BloomScreen() {
   const requestHint = useCallback(() => {
     if (!game || !isPlaying) return;
     if (game.hintsUsed >= MAX_HINTS) return;
-    if (game.revealedLetters.length >= 1) return; // one hint per ring
+    if (game.revealedLetters.length >= 1) return;
     const letter = pickHintLetter(currentWord(), game.puzzle.graph, game.revealedLetters);
     if (!letter) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setGame(g => g ? {
-      ...g,
-      hintsUsed: g.hintsUsed + 1,
-      revealedLetters: [...g.revealedLetters, letter],
-    } : g);
+    setGame(g => g ? { ...g, hintsUsed: g.hintsUsed + 1, revealedLetters: [...g.revealedLetters, letter] } : g);
   }, [game, isPlaying]);
 
   // ── Render ────────────────────────────────────────────────────────────
@@ -322,7 +314,7 @@ export default function BloomScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <Stack.Screen options={{ title: 'BLOOM', headerStyle: { backgroundColor: Colors.bg }, headerTintColor: Colors.darkGreen }} />
+        <Stack.Screen options={{ title: 'bloom', headerStyle: { backgroundColor: Colors.bg }, headerTintColor: Colors.darkGreen }} />
         <ActivityIndicator size="large" color={Colors.midGreen} />
       </View>
     );
@@ -331,7 +323,7 @@ export default function BloomScreen() {
   if (error || !game) {
     return (
       <View style={styles.centered}>
-        <Stack.Screen options={{ title: 'BLOOM', headerStyle: { backgroundColor: Colors.bg }, headerTintColor: Colors.darkGreen }} />
+        <Stack.Screen options={{ title: 'bloom', headerStyle: { backgroundColor: Colors.bg }, headerTintColor: Colors.darkGreen }} />
         <Text style={styles.errorBig}>{error || 'Something went wrong.'}</Text>
         <TouchableOpacity style={[styles.btnPrimary, { marginTop: Spacing.lg }]} onPress={() => loadPuzzle(fetchTodaysPuzzle)}>
           <Text style={styles.btnPrimaryText}>RETRY</Text>
@@ -375,26 +367,52 @@ export default function BloomScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Result banner — above the board, compact */}
+        {game.won && (
+          <View style={styles.resultBanner}>
+            <Text style={styles.resultTitle}>Full Bloom! 🌸</Text>
+            <Text style={styles.resultSub}>
+              {game.hintsUsed === 0 ? 'Flawless — no hints needed 🌟' : `${game.hintsUsed} hint${game.hintsUsed > 1 ? 's' : ''} used`}
+            </Text>
+          </View>
+        )}
+        {game.lost && (
+          <View style={[styles.resultBanner, styles.resultBannerLoss]}>
+            <Text style={[styles.resultTitle, styles.resultTitleLoss]}>Almost in Bloom 🌿</Text>
+            <Text style={styles.resultSub}>Here's one valid path ↓</Text>
+          </View>
+        )}
+
         {/* Main game area: flower + rings */}
         <View style={styles.gameArea}>
           <FlowerGrowth ringsComplete={ringsComplete} />
 
           <View style={styles.rings}>
-            {/* Ring 4 → Ring 1 (top to bottom visually = highest ring first) */}
             {[4, 3, 2, 1].map(ring => {
-              let status: 'future' | 'active' | 'bloomed' = 'future';
-              if (ring < game.currentRing) status = 'bloomed';
-              else if (ring === game.currentRing) status = 'active';
+              const playerCompleted = ring <= game.words.length;
+              const solutionIdx     = ring - (game.words.length + 1); // 0-based into solutionPath
+              const isRevealed      = game.lost && solutionIdx >= 0 && solutionIdx < revealedSolutionCount;
+
+              let status: 'future' | 'active' | 'bloomed' | 'revealed' = 'future';
+              if (playerCompleted)                           status = 'bloomed';
+              else if (isRevealed)                          status = 'revealed';
+              else if (isPlaying && ring === game.currentRing) status = 'active';
+
+              const word = playerCompleted
+                ? (game.words[ring - 1] ?? '')
+                : isRevealed
+                  ? (solutionPath[solutionIdx] ?? '')
+                  : '';
 
               return (
                 <RingRow
                   key={ring}
                   ringIndex={ring}
-                  word={ring < game.currentRing ? game.words[ring - 1] ?? '' : ''}
-                  typingInput={ring === game.currentRing ? input : ''}
+                  word={word}
+                  typingInput={isPlaying && ring === game.currentRing ? input : ''}
                   status={status}
                   tileSize={tileSize}
-                  hintLetters={ring === game.currentRing ? game.revealedLetters : []}
+                  hintLetters={isPlaying && ring === game.currentRing ? game.revealedLetters : []}
                 />
               );
             })}
@@ -409,129 +427,43 @@ export default function BloomScreen() {
           </View>
         </View>
 
-        {/* Miss indicator — always visible while a game is loaded */}
-        {game && (
-          <Animated.View style={[styles.missRow, { transform: [{ translateX: shakeAnim }] }]}>
-            <Text style={styles.missLabel}>Attempts</Text>
-            {Array.from({ length: MAX_MISSES }).map((_, i) => (
-              <View key={i} style={[styles.missDot, i < game.misses && styles.missDotUsed]} />
-            ))}
-          </Animated.View>
-        )}
+        {/* Miss indicator */}
+        <Animated.View style={[styles.missRow, { transform: [{ translateX: shakeAnim }] }]}>
+          <Text style={styles.missLabel}>Attempts</Text>
+          {Array.from({ length: MAX_MISSES }).map((_, i) => (
+            <View key={i} style={[styles.missDot, i < game.misses && styles.missDotUsed]} />
+          ))}
+        </Animated.View>
 
-        {/* Input area */}
-        {isPlaying ? (
+        {/* Input area — hint button while playing */}
+        {isPlaying && (
           <View style={styles.inputArea}>
-            {/* Hint button */}
             {game.hintsUsed < MAX_HINTS ? (
               <TouchableOpacity style={styles.btnHint} onPress={requestHint}>
-                <Text style={styles.btnHintText}>
-                  HINT ({MAX_HINTS - game.hintsUsed} left)
-                </Text>
+                <Text style={styles.btnHintText}>HINT ({MAX_HINTS - game.hintsUsed} left)</Text>
               </TouchableOpacity>
             ) : (
               <View style={[styles.btnHint, styles.btnHintExhausted]}>
-                <Text style={[styles.btnHintText, styles.btnHintTextExhausted]}>
-                  NO HINTS LEFT
-                </Text>
+                <Text style={[styles.btnHintText, styles.btnHintTextExhausted]}>NO HINTS LEFT</Text>
               </View>
             )}
           </View>
-        ) : game.won ? (
-          /* ── Win screen ───────────────────────────────────────────────── */
-          <View style={styles.doneBox}>
-            <Text style={styles.doneTitle}>Full Bloom! 🌸</Text>
-            <Text style={styles.doneSub}>
-              {game.hintsUsed === 0 ? 'No hints used! 🌟' : `Hints used: ${game.hintsUsed}`}
-              {'\n'}Day {game.puzzle.dayIndex} · Seed: {game.puzzle.seed.toUpperCase()}
-            </Text>
-
-            <View style={styles.chain}>
-              {[game.puzzle.seed.toLowerCase(), ...game.words].map((w, i) => {
-                const prev = i === 0 ? '' : [game.puzzle.seed.toLowerCase(), ...game.words][i - 1];
-                const newLetter = i === 0 ? '' : findNewLetter(prev, w);
-                return (
-                  <View key={i} style={styles.chainRow}>
-                    <Text style={styles.chainEmoji}>{i === 0 ? '🌱' : i === game.words.length ? '🌸' : '🌿'}</Text>
-                    <Text style={styles.chainWord}>{w.toUpperCase()}</Text>
-                    {newLetter ? <Text style={styles.chainNew}>+{newLetter}</Text> : null}
-                  </View>
-                );
-              })}
-            </View>
-
-            <TouchableOpacity style={styles.btnPrimary} onPress={() => loadPuzzle(fetchTodaysPuzzle)}>
-              <Text style={styles.btnPrimaryText}>TODAY'S PUZZLE</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          /* ── Loss screen ──────────────────────────────────────────────── */
-          (() => {
-            // All words the player correctly submitted
-            const completed = [game.puzzle.seed.toLowerCase(), ...game.words];
-            const lastWord = completed[completed.length - 1];
-            // Use hint letter if one was revealed for the ring they were on
-            const hintLetter = game.revealedLetters[0];
-            const remaining = (
-              hintLetter
-                ? findPathToBloomViaLetter(lastWord, hintLetter, game.puzzle.graph)
-                : findPathToBloom(lastWord, game.puzzle.graph)
-            ) ?? [];
-
-            return (
-              <View style={styles.lossBox}>
-                <Text style={styles.lossTitle}>Almost in Bloom 🌿</Text>
-                <Text style={styles.lossSub}>So close — here's one way it could have grown.</Text>
-
-                <View style={styles.chain}>
-                  {/* Player's correct progress */}
-                  {completed.map((w, i) => {
-                    const prev = i === 0 ? '' : completed[i - 1];
-                    const newLetter = i === 0 ? '' : findNewLetter(prev, w);
-                    return (
-                      <View key={`c${i}`} style={styles.chainRow}>
-                        <Text style={styles.chainEmoji}>{i === 0 ? '🌱' : '✅'}</Text>
-                        <Text style={styles.chainWord}>{w.toUpperCase()}</Text>
-                        {newLetter ? <Text style={styles.chainNew}>+{newLetter.toUpperCase()}</Text> : null}
-                      </View>
-                    );
-                  })}
-
-                  {/* Remaining valid path */}
-                  {remaining.length > 0 && (
-                    <>
-                      <View style={styles.lossDivider}>
-                        <Text style={styles.lossDividerText}>one valid path</Text>
-                      </View>
-                      {remaining.map((w, i) => {
-                        const prev = i === 0 ? lastWord : remaining[i - 1];
-                        const newLetter = findNewLetter(prev, w);
-                        return (
-                          <View key={`s${i}`} style={styles.chainRow}>
-                            <Text style={styles.chainEmoji}>{w.length === 7 ? '🌸' : '💡'}</Text>
-                            <Text style={[styles.chainWord, styles.chainWordSuggest]}>
-                              {w.toUpperCase()}
-                            </Text>
-                            {newLetter ? (
-                              <Text style={[styles.chainNew, styles.chainNewSuggest]}>
-                                +{newLetter.toUpperCase()}
-                              </Text>
-                            ) : null}
-                          </View>
-                        );
-                      })}
-                    </>
-                  )}
-                </View>
-
-                <TouchableOpacity style={styles.btnPrimary} onPress={() => loadPuzzle(fetchTodaysPuzzle, true)}>
-                  <Text style={styles.btnPrimaryText}>TRY AGAIN</Text>
-                </TouchableOpacity>
-              </View>
-            );
-          })()
         )}
 
+        {/* Action buttons — shown when game is over */}
+        {(game.won || game.lost) && (
+          <View style={styles.actionRow}>
+            {game.won ? (
+              <TouchableOpacity style={styles.btnPrimary} onPress={openGarden}>
+                <Text style={styles.btnPrimaryText}>YOUR GARDEN 🌱</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.btnPrimary} onPress={() => loadPuzzle(fetchTodaysPuzzle, true)}>
+                <Text style={styles.btnPrimaryText}>TRY AGAIN</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       {/* Word prompt + keyboard — pinned above home indicator */}
@@ -582,15 +514,25 @@ export default function BloomScreen() {
           </View>
         </View>
       )}
-      {/* Your Garden stats modal */}
-      {gardenModal && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Your Garden 🌱</Text>
 
+      {/* Your Garden — full-screen modal */}
+      <Modal
+        visible={gardenModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setGardenModal(false)}
+      >
+        <SafeAreaView style={styles.fullModal}>
+          <View style={styles.fullModalHeader}>
+            <Text style={styles.fullModalTitle}>Your Garden 🌱</Text>
+            <TouchableOpacity onPress={() => setGardenModal(false)} style={styles.fullModalCloseBtn}>
+              <Text style={styles.fullModalCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView contentContainerStyle={styles.fullModalContent}>
             {gardenStats && gardenStats.played > 0 ? (
               <>
-                {/* 4-stat grid */}
                 <View style={styles.gardenGrid}>
                   {[
                     { label: 'Played',  value: String(gardenStats.played) },
@@ -605,7 +547,6 @@ export default function BloomScreen() {
                   ))}
                 </View>
 
-                {/* Miss distribution — always show all rows */}
                 <View style={styles.gardenDist}>
                   <Text style={styles.gardenDistTitle}>Misses per win</Text>
                   {Array.from({ length: MAX_MISSES }, (_, i) => i).map(i => {
@@ -639,73 +580,62 @@ export default function BloomScreen() {
                 No games yet — play your first puzzle!
               </Text>
             )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
 
-            <TouchableOpacity
-              style={[styles.modalBtnGo, { marginTop: Spacing.md, width: '100%' }]}
-              onPress={() => setGardenModal(false)}
-            >
-              <Text style={styles.modalBtnGoText}>CLOSE</Text>
+      {/* How-to-play — full-screen modal */}
+      <Modal
+        visible={howToModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setHowToModal(false)}
+      >
+        <SafeAreaView style={styles.fullModal}>
+          <View style={styles.fullModalHeader}>
+            <Text style={[styles.fullModalTitle, { fontFamily: Fonts.mono }]}>how to play</Text>
+            <TouchableOpacity onPress={() => setHowToModal(false)} style={styles.fullModalCloseBtn}>
+              <Text style={styles.fullModalCloseText}>✕</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      )}
 
-      {/* How-to-play modal */}
-      {howToModal && (
-        <View style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.lg }}>
-            <View style={[styles.modal, { width: 320 }]}>
-              <Text style={[styles.modalTitle, { fontFamily: Fonts.mono }]}>how to play</Text>
+          <ScrollView contentContainerStyle={styles.fullModalContent}>
+            <Text style={styles.howToSection}>Goal</Text>
+            <Text style={styles.howToBody}>
+              Grow a word from 3 letters to 7 letters, one letter at a time.
+            </Text>
 
-              {/* Goal */}
-              <Text style={styles.howToSection}>Goal</Text>
-              <Text style={styles.howToBody}>
-                Grow a word from 3 letters to 7 letters, one letter at a time.
-              </Text>
+            <Text style={styles.howToSection}>Rules</Text>
+            <Text style={styles.howToBody}>
+              Each guess must contain all the letters from the previous word, plus exactly one new letter — rearranged in any order.
+            </Text>
 
-              {/* Rules */}
-              <Text style={styles.howToSection}>Rules</Text>
-              <Text style={styles.howToBody}>
-                Each guess must contain all the letters from the previous word, plus exactly one new letter — rearranged in any order.
-              </Text>
-
-              {/* Example chain */}
-              <View style={styles.howToChain}>
-                {['ACE','RACE','TRACE','CRATES','SCATTER'].map((w, i, arr) => (
-                  <View key={w} style={styles.howToChainRow}>
-                    <Text style={styles.howToChainWord}>{w}</Text>
-                    {i < arr.length - 1 && <Text style={styles.howToChainArrow}>→</Text>}
-                  </View>
-                ))}
-              </View>
-
-              {/* Misses */}
-              <Text style={styles.howToSection}>Attempts</Text>
-              <Text style={styles.howToBody}>
-                You have {MAX_MISSES} attempts per puzzle. Each invalid submission uses one.
-              </Text>
-              <View style={[styles.missRow, { marginVertical: Spacing.xs }]}>
-                {Array.from({ length: MAX_MISSES }).map((_, i) => (
-                  <View key={i} style={styles.missDot} />
-                ))}
-              </View>
-
-              {/* Hints */}
-              <Text style={styles.howToSection}>Hints</Text>
-              <Text style={styles.howToBody}>
-                Use up to {MAX_HINTS} hints per puzzle. Each hint reveals one possible new letter.
-              </Text>
-
-              <TouchableOpacity
-                style={[styles.modalBtnGo, { marginTop: Spacing.md, width: '100%' }]}
-                onPress={() => setHowToModal(false)}
-              >
-                <Text style={styles.modalBtnGoText}>GOT IT</Text>
-              </TouchableOpacity>
+            <View style={styles.howToChain}>
+              {['ACE', 'RACE', 'TRACE', 'CRATES', 'SCATTER'].map((w, i, arr) => (
+                <View key={w} style={styles.howToChainRow}>
+                  <Text style={styles.howToChainWord}>{w}</Text>
+                  {i < arr.length - 1 && <Text style={styles.howToChainArrow}>→</Text>}
+                </View>
+              ))}
             </View>
+
+            <Text style={styles.howToSection}>Attempts</Text>
+            <Text style={styles.howToBody}>
+              You have {MAX_MISSES} attempts per puzzle. Each invalid submission uses one.
+            </Text>
+            <View style={[styles.missRow, { marginVertical: Spacing.sm }]}>
+              {Array.from({ length: MAX_MISSES }).map((_, i) => (
+                <View key={i} style={styles.missDot} />
+              ))}
+            </View>
+
+            <Text style={styles.howToSection}>Hints</Text>
+            <Text style={styles.howToBody}>
+              Use up to {MAX_HINTS} hints per puzzle. Each hint reveals one possible new letter as a gold tile beside the active row.
+            </Text>
           </ScrollView>
-        </View>
-      )}
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }
@@ -725,8 +655,34 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg,
   },
   content: {
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md,
     alignItems: 'center',
+  },
+
+  // Result banner — above the board
+  resultBanner: {
+    width: '100%',
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
+    alignItems: 'center',
+  },
+  resultBannerLoss: {
+    // keep same layout, colour handled by title
+  },
+  resultTitle: {
+    color: Colors.darkGreen,
+    fontSize: Fonts.size.xl,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  resultTitleLoss: {
+    color: Colors.midGreen,
+  },
+  resultSub: {
+    color: Colors.textMuted,
+    fontSize: Fonts.size.sm,
+    marginTop: 3,
+    letterSpacing: 0.5,
   },
 
   // Miss indicator
@@ -770,6 +726,12 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'column',
     alignItems: 'flex-end',
+  },
+
+  // Action buttons (end-of-game)
+  actionRow: {
+    marginTop: Spacing.lg,
+    alignItems: 'center',
   },
 
   // Input
@@ -822,108 +784,6 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     letterSpacing: 1.5,
   },
-
-  // Done / victory
-  doneBox: {
-    marginTop: Spacing.lg,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    alignItems: 'center',
-    width: '90%',
-    maxWidth: 360,
-    borderWidth: 1.5,
-    borderColor: Colors.midGreen,
-  },
-  doneTitle: {
-    color: Colors.darkGreen,
-    fontSize: Fonts.size.xxl,
-    fontWeight: '700',
-    marginBottom: Spacing.xs,
-  },
-  doneSub: {
-    color: Colors.textMuted,
-    fontSize: Fonts.size.sm,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: Spacing.md,
-  },
-  chain: {
-    alignSelf: 'stretch',
-    marginBottom: Spacing.md,
-  },
-  chainRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    paddingVertical: 3,
-  },
-  chainEmoji: {
-    fontSize: Fonts.size.md,
-    width: 24,
-  },
-  chainWord: {
-    color: Colors.darkGreen,
-    fontWeight: '700',
-    fontSize: Fonts.size.md,
-    fontFamily: Fonts.mono,
-    letterSpacing: 2,
-  },
-  chainNew: {
-    color: Colors.pinkDark,
-    backgroundColor: Colors.pinkLight,
-    fontSize: Fonts.size.xs,
-    fontWeight: '700',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: Radius.full,
-  },
-  chainWordSuggest: {
-    color: Colors.textMuted,
-  },
-  chainNewSuggest: {
-    color: Colors.textMuted,
-    backgroundColor: Colors.surface,
-  },
-
-  // Loss screen
-  lossBox: {
-    marginTop: Spacing.lg,
-    backgroundColor: '#fff8f8',
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    alignItems: 'center',
-    width: '90%',
-    maxWidth: 360,
-    borderWidth: 1.5,
-    borderColor: '#e8c0c0',
-  },
-  lossTitle: {
-    color: '#c0392b',
-    fontSize: Fonts.size.xxl,
-    fontWeight: '700',
-    marginBottom: Spacing.xs,
-  },
-  lossSub: {
-    color: Colors.textMuted,
-    fontSize: Fonts.size.sm,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: Spacing.md,
-  },
-  lossDivider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: Spacing.sm,
-  },
-  lossDividerText: {
-    color: Colors.textMuted,
-    fontSize: Fonts.size.xs,
-    letterSpacing: 1,
-    fontStyle: 'italic',
-    backgroundColor: '#fff8f8',
-    paddingHorizontal: 6,
-  },
   btnPrimary: {
     backgroundColor: Colors.darkGreen,
     borderRadius: Radius.md,
@@ -938,7 +798,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
 
-  // Seed picker modal
+  // Seed picker modal (small overlay)
   modalOverlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
@@ -1019,6 +879,38 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: Fonts.size.sm,
     letterSpacing: 1.5,
+  },
+
+  // Full-screen modals (garden, how-to-play)
+  fullModal: {
+    flex: 1,
+    backgroundColor: Colors.bg,
+  },
+  fullModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.tileBorder,
+  },
+  fullModalTitle: {
+    color: Colors.darkGreen,
+    fontWeight: '700',
+    fontSize: Fonts.size.xl,
+  },
+  fullModalCloseBtn: {
+    padding: Spacing.sm,
+  },
+  fullModalCloseText: {
+    color: Colors.textMuted,
+    fontSize: Fonts.size.lg,
+    fontWeight: '700',
+  },
+  fullModalContent: {
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xl,
   },
 
   // Garden modal
