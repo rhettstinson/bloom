@@ -20,7 +20,7 @@ import RingRow from '../../components/RingRow';
 import FlowerGrowth from '../../components/FlowerGrowth';
 import BloomKeyboard from '../../components/BloomKeyboard';
 import { fetchTodaysPuzzle, fetchPuzzleBySeed, type PuzzleResponse } from '../../lib/api';
-import { isValidMove, isAnagramPlusOne, findNewLetter, findPathToBloom, type Graph } from '../../lib/gameLogic';
+import { isValidMove, isAnagramPlusOne, findNewLetter, findPathToBloom, findPathToBloomViaLetter, type Graph } from '../../lib/gameLogic';
 import { loadProgress, saveProgress, recordResult, loadStats, type Stats } from '../../lib/storage';
 import { Colors, Fonts, Spacing, Radius } from '../../constants/theme';
 
@@ -211,6 +211,8 @@ export default function BloomScreen() {
     if (!game || !isPlaying) return;
     const candidate = input.trim().toLowerCase();
     if (!candidate) return;
+    // Must fill every tile before submitting
+    if (candidate.length < currentWord().length + 1) return;
 
     // ── Unified miss handler ──────────────────────────────────────────
     const recordMiss = (msg: string) => {
@@ -312,6 +314,7 @@ export default function BloomScreen() {
   const requestHint = useCallback(() => {
     if (!game || !isPlaying) return;
     if (game.hintsUsed >= MAX_HINTS) return;
+    if (game.revealedLetters.length >= 1) return; // one hint per ring
     const letter = pickHintLetter(currentWord(), game.puzzle.graph, game.revealedLetters);
     if (!letter) {
       setInputError('No more hints available for this ring');
@@ -485,13 +488,18 @@ export default function BloomScreen() {
             // All words the player correctly submitted
             const completed = [game.puzzle.seed.toLowerCase(), ...game.words];
             const lastWord = completed[completed.length - 1];
-            // Valid path from where they stopped
-            const remaining = findPathToBloom(lastWord, game.puzzle.graph) ?? [];
+            // Use hint letter if one was revealed for the ring they were on
+            const hintLetter = game.revealedLetters[0];
+            const remaining = (
+              hintLetter
+                ? findPathToBloomViaLetter(lastWord, hintLetter, game.puzzle.graph)
+                : findPathToBloom(lastWord, game.puzzle.graph)
+            ) ?? [];
 
             return (
               <View style={styles.lossBox}>
-                <Text style={styles.lossTitle}>Out of Attempts 🥀</Text>
-                <Text style={styles.lossSub}>Streak reset.</Text>
+                <Text style={styles.lossTitle}>Almost in Bloom 🌿</Text>
+                <Text style={styles.lossSub}>So close — here's one way it could have grown.</Text>
 
                 <View style={styles.chain}>
                   {/* Player's correct progress */}

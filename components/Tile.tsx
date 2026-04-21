@@ -7,18 +7,20 @@
  *   'typing'  — gold-pale bg, gold border, has letter (scales up slightly)
  *   'bloomed' — pink bg, pink-dark border, white text (ring completed)
  *   'seed'    — dark-green bg, white text
+ *   'hint'    — gold bg, white text (revealed hint letter)
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import Animated, {
+  cancelAnimation,
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withDelay,
   withSpring,
 } from 'react-native-reanimated';
-import { Colors, Fonts, Radius } from '../constants/theme';
+import { Colors, Fonts } from '../constants/theme';
 
 export type TileState = 'empty' | 'active' | 'typing' | 'bloomed' | 'seed' | 'hint';
 
@@ -58,26 +60,33 @@ const TEXT: Record<TileState, string> = {
 
 export default function Tile({ letter = '', state = 'empty', size = 44, delay = 0 }: TileProps) {
   const scale = useSharedValue(1);
-  const prevState = useSharedValue(state);
 
-  // Pop when letter is typed
+  // Track previous values in refs (not shared values) to avoid UI-thread races
+  const prevLetterRef = useRef('');
+  const hasBloomedRef = useRef(false);
+
+  // Pop when a letter is freshly typed ('' → letter, not letter → letter)
   useEffect(() => {
-    if (letter && (state === 'typing' || state === 'active')) {
+    const wasEmpty = !prevLetterRef.current;
+    prevLetterRef.current = letter;
+    if (letter && wasEmpty && (state === 'typing' || state === 'active')) {
+      cancelAnimation(scale);
       scale.value = withSpring(1.08, { damping: 6, stiffness: 300 }, () => {
         scale.value = withTiming(1, { duration: 100 });
       });
     }
-  }, [letter]);
+  }, [letter, state]);
 
-  // Bloom pop when ring is completed
+  // Bloom pop fires exactly once when state first transitions to 'bloomed'
   useEffect(() => {
-    if (state === 'bloomed' && prevState.value !== 'bloomed') {
+    if (state === 'bloomed' && !hasBloomedRef.current) {
+      hasBloomedRef.current = true;
+      cancelAnimation(scale);
       scale.value = withDelay(delay, withSpring(1.12, { damping: 5, stiffness: 200 }, () => {
         scale.value = withTiming(1, { duration: 150 });
       }));
     }
-    prevState.value = state;
-  }, [state, delay]);
+  }, [state]); // intentionally excludes delay — use the value captured at first bloom
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],

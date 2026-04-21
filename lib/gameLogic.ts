@@ -86,6 +86,32 @@ export function ringForWord(word: string): number {
 }
 
 /**
+ * DFS through the graph preferring a path whose first step adds `hintLetter`.
+ * Falls back to any valid path if no such path exists.
+ */
+export function findPathToBloomViaLetter(
+  startWord: string,
+  hintLetter: string,
+  graph: Graph,
+): string[] | null {
+  if (startWord.length >= 7) return [];
+  const hint = hintLetter.toLowerCase();
+  const children = graph[startWord.toLowerCase()] ?? [];
+
+  // Try children whose new letter matches the hint first
+  for (const child of children) {
+    if (findNewLetter(startWord, child).toLowerCase() === hint) {
+      if (child.length === 7) return [child];
+      const rest = findPathToBloom(child, graph);
+      if (rest !== null) return [child, ...rest];
+    }
+  }
+
+  // Fall back to any valid path
+  return findPathToBloom(startWord, graph);
+}
+
+/**
  * DFS through the graph to find any valid path from startWord to a 7-letter word.
  * Returns the words FROM startWord's children up to (and including) the 7-letter word.
  * Returns [] if startWord is already 7 letters.
