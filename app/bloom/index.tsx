@@ -70,7 +70,6 @@ export default function BloomScreen() {
   const [error, setError]       = useState('');
   const [game, setGame]         = useState<GameState | null>(null);
   const [input, setInput]       = useState('');
-  const [inputError, setInputError] = useState('');
   const [gameKey, setGameKey]   = useState(0);
   const [seedModal, setSeedModal] = useState(false);
   const [gardenModal, setGardenModal] = useState(false);
@@ -93,7 +92,6 @@ export default function BloomScreen() {
     setLoading(true);
     setError('');
     setInput('');
-    setInputError('');
     try {
       const puzzle = await fetcher();
       const saved = fresh ? null : await loadProgress(puzzle.dayIndex);
@@ -159,7 +157,6 @@ export default function BloomScreen() {
         lost: false,
       });
       setInput('');
-      setInputError('');
       setError('');
     } catch (e) {
       setError(`Seed "${seed}" not found. Available: ACE LAP NAG EAR RAN TOE ORE PIE ALE ODE APE ARC ARM ART ASH BAD BAG BAN BAR BAT`);
@@ -195,14 +192,12 @@ export default function BloomScreen() {
   const handleKey = useCallback((letter: string) => {
     if (!isPlaying || !game) return;
     const maxLen = game.currentRing + 3; // ring 1→4 letters, ring 4→7 letters
-    setInputError('');
     setInput(prev => prev.length < maxLen ? prev + letter.toUpperCase() : prev);
   }, [isPlaying, game]);
 
   const handleDelete = useCallback(() => {
     if (!isPlaying) return;
     setInput(prev => prev.slice(0, -1));
-    setInputError('');
   }, [isPlaying]);
 
   // ── Submit ───────────────────────────────────────────────────────────
@@ -215,9 +210,8 @@ export default function BloomScreen() {
     if (candidate.length < currentWord().length + 1) return;
 
     // ── Unified miss handler ──────────────────────────────────────────
-    const recordMiss = (msg: string) => {
+    const recordMiss = () => {
       const newMisses = game.misses + 1;
-      setInputError(msg);
       setInput('');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       triggerShake();
@@ -225,7 +219,6 @@ export default function BloomScreen() {
       if (newMisses >= MAX_MISSES) {
         // Out of lives — end game
         setGame({ ...game, misses: newMisses, currentRing: TOTAL_RINGS + 1, won: false, lost: true });
-        setInputError('');
         saveProgress({
           dayIndex: game.puzzle.dayIndex,
           seed: game.puzzle.seed,
@@ -253,13 +246,13 @@ export default function BloomScreen() {
 
     // Error type 1: not a real word in the graph at all
     if (!(candidate in game.puzzle.graph)) {
-      recordMiss('Not a word in the dictionary');
+      recordMiss();
       return;
     }
 
     // Error type 2: valid word but violates the anagram+1 rule
     if (!isAnagramPlusOne(currentWord(), candidate)) {
-      recordMiss('Must use all previous letters plus exactly one new letter');
+      recordMiss();
       return;
     }
 
@@ -268,13 +261,12 @@ export default function BloomScreen() {
     if (!isFinalRing) {
       const children = game.puzzle.graph[candidate];
       if (!children || children.length === 0) {
-        recordMiss('That word leads nowhere — no path to full bloom');
+        recordMiss();
         return;
       }
     }
 
     // ── Valid move — advance ring ─────────────────────────────────────
-    setInputError('');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     const newWords = [...game.words, candidate];
@@ -316,10 +308,7 @@ export default function BloomScreen() {
     if (game.hintsUsed >= MAX_HINTS) return;
     if (game.revealedLetters.length >= 1) return; // one hint per ring
     const letter = pickHintLetter(currentWord(), game.puzzle.graph, game.revealedLetters);
-    if (!letter) {
-      setInputError('No more hints available for this ring');
-      return;
-    }
+    if (!letter) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setGame(g => g ? {
       ...g,
@@ -422,24 +411,17 @@ export default function BloomScreen() {
 
         {/* Miss indicator — always visible while a game is loaded */}
         {game && (
-          <View style={styles.missRow}>
+          <Animated.View style={[styles.missRow, { transform: [{ translateX: shakeAnim }] }]}>
             <Text style={styles.missLabel}>Attempts</Text>
             {Array.from({ length: MAX_MISSES }).map((_, i) => (
               <View key={i} style={[styles.missDot, i < game.misses && styles.missDotUsed]} />
             ))}
-          </View>
+          </Animated.View>
         )}
 
         {/* Input area */}
         {isPlaying ? (
           <View style={styles.inputArea}>
-            {/* Error — shakes with the error message */}
-            {inputError ? (
-              <Animated.Text style={[styles.errorText, { transform: [{ translateX: shakeAnim }] }]}>
-                {inputError}
-              </Animated.Text>
-            ) : null}
-
             {/* Hint button */}
             {game.hintsUsed < MAX_HINTS ? (
               <TouchableOpacity style={styles.btnHint} onPress={requestHint}>
@@ -810,13 +792,6 @@ const styles = StyleSheet.create({
     fontSize: Fonts.size.lg,
     letterSpacing: 2,
     fontWeight: '600',
-  },
-  errorText: {
-    color: Colors.error,
-    fontSize: Fonts.size.sm,
-    textAlign: 'center',
-    marginBottom: Spacing.xs,
-    maxWidth: 320,
   },
   errorBig: {
     color: Colors.error,

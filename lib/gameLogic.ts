@@ -85,9 +85,17 @@ export function ringForWord(word: string): number {
   return word.length - 3;
 }
 
+/** Sort children by descending graph connectivity — more connections ≈ more common word */
+function sortByConnectivity(children: string[], graph: Graph): string[] {
+  return children
+    .slice()
+    .sort((a, b) => (graph[b.toLowerCase()]?.length ?? 0) - (graph[a.toLowerCase()]?.length ?? 0));
+}
+
 /**
  * DFS through the graph preferring a path whose first step adds `hintLetter`.
  * Falls back to any valid path if no such path exists.
+ * Children are sorted by connectivity (descending) to prefer common words.
  */
 export function findPathToBloomViaLetter(
   startWord: string,
@@ -96,7 +104,7 @@ export function findPathToBloomViaLetter(
 ): string[] | null {
   if (startWord.length >= 7) return [];
   const hint = hintLetter.toLowerCase();
-  const children = graph[startWord.toLowerCase()] ?? [];
+  const children = sortByConnectivity(graph[startWord.toLowerCase()] ?? [], graph);
 
   // Try children whose new letter matches the hint first
   for (const child of children) {
@@ -116,11 +124,12 @@ export function findPathToBloomViaLetter(
  * Returns the words FROM startWord's children up to (and including) the 7-letter word.
  * Returns [] if startWord is already 7 letters.
  * Returns null if no path exists (should not happen in a well-formed puzzle graph).
+ * Children are sorted by connectivity (descending) to prefer common words.
  */
 export function findPathToBloom(startWord: string, graph: Graph): string[] | null {
   if (startWord.length >= 7) return [];
   function dfs(word: string): string[] | null {
-    const children = graph[word.toLowerCase()] ?? [];
+    const children = sortByConnectivity(graph[word.toLowerCase()] ?? [], graph);
     for (const child of children) {
       if (child.length === 7) return [child];
       const rest = dfs(child);
