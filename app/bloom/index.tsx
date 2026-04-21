@@ -177,7 +177,13 @@ export default function BloomScreen() {
     return game.words[game.currentRing - 2] ?? game.puzzle.seed;
   };
 
-  const ringsComplete = game ? Math.min(game.currentRing - 1, TOTAL_RINGS) : 0;
+  // On loss, freeze the flower at the player's actual completed rings
+  // (don't grow as solution is revealed). On win, show full bloom.
+  const ringsComplete = game
+    ? game.lost
+      ? game.words.length
+      : Math.min(game.currentRing - 1, TOTAL_RINGS)
+    : 0;
   const isPlaying = !!game && game.currentRing <= TOTAL_RINGS && !game.lost;
 
   // Solution path for loss screen — computed once when lost, stable until game changes
@@ -383,11 +389,11 @@ export default function BloomScreen() {
           </View>
         )}
 
-        {/* Main game area: flower + rings */}
+        {/* Main game area: flower (hidden when game ends) + rings */}
         <View style={styles.gameArea}>
-          <FlowerGrowth ringsComplete={ringsComplete} />
+          {isPlaying && <FlowerGrowth ringsComplete={ringsComplete} />}
 
-          <View style={styles.rings}>
+          <View style={[styles.rings, !isPlaying && styles.ringsFull]}>
             {[4, 3, 2, 1].map(ring => {
               const playerCompleted = ring <= game.words.length;
               const solutionIdx     = ring - (game.words.length + 1); // 0-based into solutionPath
@@ -726,6 +732,9 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'column',
     alignItems: 'flex-end',
+  },
+  ringsFull: {
+    alignItems: 'center', // centre the board when the flower is hidden
   },
 
   // Action buttons (end-of-game)
