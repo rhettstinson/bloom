@@ -45,19 +45,30 @@ interface GameState {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+function countPaths(word: string, graph: Graph, memo: Map<string, number>): number {
+  if (memo.has(word)) return memo.get(word)!;
+  const children = graph[word.toLowerCase()] ?? [];
+  const count = children.length === 0 ? 1 : children.reduce((sum, c) => sum + countPaths(c, graph, memo), 0);
+  memo.set(word, count);
+  return count;
+}
+
 function pickHintLetter(currentWord: string, graph: Graph, revealed: string[]): string | null {
   const children = graph[currentWord.toLowerCase()];
   if (!children || children.length === 0) return null;
 
-  const unique = new Set<string>();
+  const memo = new Map<string, number>();
+  const scores: Record<string, number> = {};
   for (const child of children) {
     const letter = findNewLetter(currentWord, child);
-    if (letter) unique.add(letter.toUpperCase());
+    if (letter) scores[letter] = (scores[letter] ?? 0) + countPaths(child, graph, memo);
   }
 
-  const unrevealed = [...unique].filter(l => !revealed.includes(l));
-  if (unrevealed.length === 0) return null;
-  return unrevealed[Math.floor(Math.random() * unrevealed.length)];
+  const best = Object.entries(scores)
+    .filter(([l]) => !revealed.includes(l))
+    .sort((a, b) => b[1] - a[1])[0];
+
+  return best?.[0] ?? null;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
