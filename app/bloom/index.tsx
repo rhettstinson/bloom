@@ -391,9 +391,9 @@ export default function BloomScreen() {
 
         {/* Main game area: flower (hidden when game ends) + rings */}
         <View style={styles.gameArea}>
-          {isPlaying && <FlowerGrowth ringsComplete={ringsComplete} />}
+          {(isPlaying || game.lost) && <FlowerGrowth ringsComplete={ringsComplete} />}
 
-          <View style={[styles.rings, !isPlaying && styles.ringsFull]}>
+          <View style={[styles.rings, game.won && styles.ringsFull]}>
             {[4, 3, 2, 1].map(ring => {
               const playerCompleted = ring <= game.words.length;
               const solutionIdx     = ring - (game.words.length + 1); // 0-based into solutionPath
