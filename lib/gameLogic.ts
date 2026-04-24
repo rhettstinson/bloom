@@ -4,7 +4,12 @@
  * No UI, no storage, no side-effects — safe to unit-test.
  */
 
-export type Graph = Record<string, string[]>;
+export type GraphNode = { c: string[]; f: number };
+export type Graph     = Record<string, GraphNode>;
+
+// Words with frequency rank above this are treated as unknown (score 0).
+// Must match FREQ_THRESHOLD in buildGraph.ts.
+const FREQ_CAP = 100_000;
 
 /** Sort a word's letters alphabetically (lowercase) */
 export function sortStr(s: string): string {
@@ -50,19 +55,15 @@ export function findNewLetter(prev: string, curr: string): string {
  * (broadest coverage without pointing to a single solution).
  */
 export function getHintLetter(currentWord: string, graph: Graph): string | null {
-  const children = graph[currentWord.toLowerCase()];
+  const children = graph[currentWord.toLowerCase()]?.c;
   if (!children || children.length === 0) return null;
 
-  // Tally new letters across all children
   const freq: Record<string, number> = {};
   for (const child of children) {
     const letter = findNewLetter(currentWord, child);
-    if (letter) {
-      freq[letter] = (freq[letter] ?? 0) + 1;
-    }
+    if (letter) freq[letter] = (freq[letter] ?? 0) + 1;
   }
 
-  // Return the most common new letter
   return Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 }
 
@@ -86,20 +87,19 @@ export function ringForWord(word: string): number {
 }
 
 /**
- * Score for a word: number of children it has in the graph.
- * Words with more children tend to be more common English words.
+ * Score for a word based on its frequency rank.
+ * Lower rank = more common word = higher score.
+ * Rank 1 (most common) → FREQ_CAP - 1. Rank FREQ_CAP+ → 0.
  */
 function wordScore(word: string, graph: Graph): number {
-  return graph[word.toLowerCase()]?.length ?? 0;
+  const node = graph[word.toLowerCase()];
+  return node ? Math.max(0, FREQ_CAP - node.f) : 0;
 }
 
 /**
  * Find the highest-scoring path from startWord to a 7-letter word.
- *
- * Instead of a greedy DFS that might lock onto an obscure branch,
- * we explore ALL paths and return the one whose total word-score is
- * highest. Score = sum of each word's child-count (more reachable words
- * = more likely to be a common word).
+ * Explores all paths and returns the one with the highest total frequency
+ * score — strongly preferring common, familiar words.
  *
  * Returns the path from startWord's children up to (and including) the
  * 7-letter word, or null if no path exists.
@@ -111,7 +111,7 @@ export function findPathToBloom(startWord: string, graph: Graph): string[] | nul
   let bestScore = -1;
 
   function dfs(word: string, path: string[], score: number, visited: Set<string>): void {
-    for (const child of (graph[word.toLowerCase()] ?? [])) {
+    for (const child of (graph[word.toLowerCase()]?.c ?? [])) {
       const cKey = child.toLowerCase();
       if (visited.has(cKey)) continue;
       const ns = score + wordScore(child, graph);
@@ -144,7 +144,7 @@ export function findPathToBloomViaLetter(
   let hintBestPath: string[] | null = null;
   let hintBestScore = -1;
 
-  for (const child of (graph[startWord.toLowerCase()] ?? [])) {
+  for (const child of (graph[startWord.toLowerCase()]?.c ?? [])) {
     if (findNewLetter(startWord, child).toLowerCase() !== hint) continue;
     const cs = wordScore(child, graph);
     if (child.length === 7) {

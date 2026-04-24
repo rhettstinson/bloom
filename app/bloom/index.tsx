@@ -47,14 +47,14 @@ interface GameState {
 
 function countPaths(word: string, graph: Graph, memo: Map<string, number>): number {
   if (memo.has(word)) return memo.get(word)!;
-  const children = graph[word.toLowerCase()] ?? [];
+  const children = graph[word.toLowerCase()]?.c ?? [];
   const count = children.length === 0 ? 1 : children.reduce((sum, c) => sum + countPaths(c, graph, memo), 0);
   memo.set(word, count);
   return count;
 }
 
 function pickHintLetter(currentWord: string, graph: Graph, revealed: string[]): string | null {
-  const children = graph[currentWord.toLowerCase()];
+  const children = graph[currentWord.toLowerCase()]?.c;
   if (!children || children.length === 0) return null;
 
   const memo = new Map<string, number>();
@@ -283,7 +283,7 @@ export default function BloomScreen() {
 
     const isFinalRing = game.currentRing === TOTAL_RINGS;
     if (!isFinalRing) {
-      const children = game.puzzle.graph[candidate];
+      const children = game.puzzle.graph[candidate]?.c;
       if (!children || children.length === 0) { recordMiss(); return; }
     }
 
@@ -400,11 +400,11 @@ export default function BloomScreen() {
           </View>
         )}
 
-        {/* Main game area: flower (hidden when game ends) + rings */}
+        {/* Main game area: flower + rings */}
         <View style={styles.gameArea}>
-          {(isPlaying || game.lost) && <FlowerGrowth ringsComplete={ringsComplete} />}
+          {(isPlaying || game.won || game.lost) && <FlowerGrowth ringsComplete={ringsComplete} />}
 
-          <View style={[styles.rings, game.won && styles.ringsFull]}>
+          <View style={styles.rings}>
             {[4, 3, 2, 1].map(ring => {
               const playerCompleted = ring <= game.words.length;
               const solutionIdx     = ring - (game.words.length + 1); // 0-based into solutionPath
