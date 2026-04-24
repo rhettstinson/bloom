@@ -1,43 +1,62 @@
-/**
- * Home screen — game suite hub
- */
-
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Colors, Fonts, Spacing, Radius } from '../constants/theme';
+import { loadProgress } from '../lib/storage';
 
-const GAMES = [
-  {
-    id: 'bloom',
-    title: 'BLOOM',
-    subtitle: 'Grow a word\nfrom 3 to 7 letters',
-    emoji: '🌸',
-    route: '/bloom',
-    available: true,
-  },
-];
+function todayIndex(): number {
+  const epoch = new Date('2025-01-01T00:00:00Z');
+  const now = new Date();
+  now.setUTCHours(0, 0, 0, 0);
+  return Math.floor((now.getTime() - epoch.getTime()) / 86_400_000);
+}
+
+function formatDate(): string {
+  return new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+}
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [played, setPlayed] = useState(false);
+
+  useEffect(() => {
+    loadProgress(todayIndex()).then(p => setPlayed(p?.done ?? false));
+  }, []);
+
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false, title: '' }} />
-      <Text style={styles.title}>🌱 Game Suite</Text>
-      <Text style={styles.sub}>Daily word puzzles</Text>
-      <View style={styles.grid}>
-        {GAMES.map(g => (
-          <TouchableOpacity
-            key={g.id}
-            style={[styles.card, !g.available && styles.cardDim]}
-            onPress={() => g.available && router.push(g.route as any)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.emoji}>{g.emoji}</Text>
-            <Text style={styles.cardTitle}>{g.title}</Text>
-            <Text style={styles.cardSub}>{g.subtitle}</Text>
-            {!g.available && <Text style={styles.soon}>Coming soon</Text>}
-          </TouchableOpacity>
-        ))}
+      <Stack.Screen options={{ headerShown: false }} />
+
+      <View style={styles.hero}>
+        <Text style={styles.icon}>🌸</Text>
+        <Text style={styles.title}>BLOOM</Text>
+        <Text style={styles.date}>{formatDate()}</Text>
+      </View>
+
+      <View style={styles.body}>
+        {played ? (
+          <Text style={styles.message}>
+            {"You've bloomed today.\nCome back tomorrow\nfor a fresh puzzle."}
+          </Text>
+        ) : (
+          <Text style={styles.message}>
+            {"Start with a 3-letter seed.\nAdd one letter at a time.\nGrow your word all the way to bloom."}
+          </Text>
+        )}
+
+        <TouchableOpacity
+          style={[styles.btn, played && styles.btnSoft]}
+          onPress={() => router.push('/bloom')}
+          activeOpacity={0.82}
+        >
+          <Text style={[styles.btnText, played && styles.btnTextSoft]}>
+            {played ? 'Admire Puzzle' : 'Play'}
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -47,57 +66,65 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.bg,
-    padding: Spacing.lg,
-    paddingTop: Spacing.xl,
     alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.lg,
+    gap: Spacing.xl,
+  },
+
+  hero: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  icon: {
+    fontSize: 72,
+    lineHeight: 84,
   },
   title: {
     color: Colors.darkGreen,
-    fontSize: Fonts.size.xxl,
-    fontWeight: '700',
-    letterSpacing: 2,
+    fontSize: Fonts.size.title,
+    fontWeight: '800',
+    letterSpacing: 6,
   },
-  sub: {
+  date: {
     color: Colors.textMuted,
     fontSize: Fonts.size.sm,
+    letterSpacing: 0.5,
     marginTop: Spacing.xs,
-    marginBottom: Spacing.xl,
-    letterSpacing: 1,
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.md,
-    justifyContent: 'center',
-  },
-  card: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    width: 160,
+
+  body: {
     alignItems: 'center',
+    gap: Spacing.lg,
+  },
+  message: {
+    color: Colors.midGreen,
+    fontSize: Fonts.size.md,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+
+  btn: {
+    backgroundColor: Colors.pink,
+    borderRadius: Radius.full,
+    paddingVertical: 14,
+    paddingHorizontal: 44,
     borderWidth: 1.5,
+    borderColor: Colors.pinkDark,
+    marginTop: Spacing.sm,
+  },
+  btnSoft: {
+    backgroundColor: Colors.surface,
     borderColor: Colors.tileBorder,
   },
-  cardDim: { opacity: 0.5 },
-  emoji: { fontSize: 40, marginBottom: Spacing.sm },
-  cardTitle: {
+  btnText: {
     color: Colors.darkGreen,
     fontSize: Fonts.size.lg,
     fontWeight: '700',
-    letterSpacing: 3,
+    letterSpacing: 1,
   },
-  cardSub: {
+  btnTextSoft: {
     color: Colors.textMuted,
-    fontSize: Fonts.size.xs,
-    textAlign: 'center',
-    marginTop: Spacing.xs,
-    lineHeight: 16,
-  },
-  soon: {
-    color: Colors.gold,
-    fontSize: Fonts.size.xs,
-    marginTop: Spacing.sm,
     fontWeight: '600',
   },
 });
