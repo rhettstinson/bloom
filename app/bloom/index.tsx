@@ -532,7 +532,7 @@ export default function BloomScreen() {
         </View>
       )}
 
-      {/* Your Garden — full-screen modal */}
+      {/* Statistics — full-screen modal */}
       <Modal
         visible={gardenModal}
         animationType="slide"
@@ -550,12 +550,15 @@ export default function BloomScreen() {
           <ScrollView contentContainerStyle={styles.fullModalContent}>
             {gardenStats && gardenStats.played > 0 ? (
               <>
-                <View style={styles.gardenGrid}>
+                <Text style={styles.gardenDistTitle}>Statistics</Text>
+                <View style={[styles.gardenGrid, { marginBottom: Spacing.lg }]}>
                   {[
-                    { label: 'Played',  value: String(gardenStats.played) },
-                    { label: 'Won %',   value: `${Math.round((gardenStats.won / gardenStats.played) * 100)}%` },
-                    { label: 'Streak',  value: String(gardenStats.streak) },
-                    { label: 'Best',    value: String(gardenStats.maxStreak) },
+                    { label: 'Completed',       value: String(gardenStats.played) },
+                    { label: 'Win %',           value: `${Math.round((gardenStats.won / gardenStats.played) * 100)}%` },
+                    { label: 'Current Streak',  value: String(gardenStats.streak) },
+                    { label: 'Max Streak',      value: String(gardenStats.maxStreak) },
+                    { label: 'Perfect Puzzles', value: String(gardenStats.missDistribution?.[0] ?? 0) },
+                    { label: 'Hint-free Wins',  value: String(gardenStats.distribution?.[0] ?? 0) },
                   ].map(({ label, value }) => (
                     <View key={label} style={styles.gardenStat}>
                       <Text style={styles.gardenStatValue}>{value}</Text>
@@ -573,20 +576,20 @@ export default function BloomScreen() {
                     return (
                       <View key={i} style={styles.gardenDistRow}>
                         <Text style={[styles.gardenDistLabel, isPerfect && styles.gardenDistLabelBest]}>
-                          {i === 0 ? 'Perfect' : `${i} miss${i > 1 ? 'es' : ''}`}
+                          {i}
                         </Text>
                         <View style={styles.gardenDistBar}>
                           {fillRatio > 0 && (
                             <View style={[
                               styles.gardenDistFill,
                               isPerfect && styles.gardenDistFillBest,
-                              { flex: fillRatio },
+                              { width: `${fillRatio * 100}%` },
                             ]} />
                           )}
+                          <Text style={styles.gardenDistCount}>
+                            {count > 0 ? String(count) : '—'}
+                          </Text>
                         </View>
-                        <Text style={[styles.gardenDistCount, isPerfect && styles.gardenDistLabelBest]}>
-                          {count > 0 ? `${count}${isPerfect ? ' ⭐' : ''}` : '—'}
-                        </Text>
                       </View>
                     );
                   })}
@@ -936,16 +939,17 @@ const styles = StyleSheet.create({
   // Garden modal
   gardenGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     width: '100%',
     marginBottom: Spacing.md,
-    gap: Spacing.xs,
+    gap: Spacing.sm,
   },
   gardenStat: {
-    flex: 1,
+    width: '47.5%',
     alignItems: 'center',
     backgroundColor: Colors.surface,
     borderRadius: Radius.md,
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.md,
     borderWidth: 1,
     borderColor: Colors.tileBorder,
   },
@@ -975,28 +979,33 @@ const styles = StyleSheet.create({
   gardenDistRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 5,
-    gap: Spacing.xs,
+    marginBottom: 7,
+    gap: Spacing.sm,
   },
   gardenDistLabel: {
-    color: Colors.darkGreen,
-    fontSize: Fonts.size.xs,
-    width: 56,
+    color: Colors.textMuted,
+    fontSize: Fonts.size.sm,
+    width: 16,
+    textAlign: 'center',
     fontWeight: '600',
   },
   gardenDistBar: {
     flex: 1,
-    height: 16,
-    backgroundColor: 'transparent',
+    height: 30,
+    backgroundColor: Colors.surface,
     borderRadius: Radius.sm,
     borderWidth: 1.5,
     borderColor: Colors.tileBorder,
     overflow: 'hidden',
     flexDirection: 'row',
+    alignItems: 'center',
   },
   gardenDistFill: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: Colors.midGreen,
-    borderRadius: Radius.sm,
   },
   gardenDistFillBest: {
     backgroundColor: Colors.gold,
@@ -1006,10 +1015,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   gardenDistCount: {
-    color: Colors.textMuted,
-    fontSize: Fonts.size.xs,
-    width: 36,
-    textAlign: 'right',
+    position: 'absolute',
+    right: 10,
+    color: Colors.darkGreen,
+    fontSize: Fonts.size.sm,
+    fontWeight: '600',
   },
   gardenEmpty: {
     color: Colors.textMuted,
